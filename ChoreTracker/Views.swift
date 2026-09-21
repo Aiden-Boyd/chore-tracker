@@ -25,7 +25,6 @@ struct HomeView: View {
             }
             .presentationDetents([.large])
         }
-        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: store.chores)
     }
 
     private var header: some View {
@@ -89,12 +88,6 @@ struct HomeView: View {
                         ParentChoreRow(chore: chore)
                     }
                     .buttonStyle(.plain)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .scale(scale: 0.96)),
-                            removal: .move(edge: .trailing).combined(with: .scale(scale: 0.82))
-                        )
-                    )
                 }
             }
         }
@@ -177,9 +170,7 @@ struct MoneyOwedCard: View {
                             Spacer()
 
                             Button("Mark paid") {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
-                                    store.markPaid(to: child.id)
-                                }
+                                store.markPaid(to: child.id)
                             }
                             .buttonStyle(.bordered)
                         }
@@ -253,16 +244,12 @@ struct ParentApprovalSection: View {
 
                     HStack {
                         Button("Send back") {
-                            withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
-                                store.reopen(chore)
-                            }
+                            store.reopen(chore)
                         }
                         .buttonStyle(.bordered)
 
                         Button {
-                            withAnimation(.spring(response: 0.38, dampingFraction: 0.68)) {
-                                store.approve(chore)
-                            }
+                            store.approve(chore)
                         } label: {
                             Label("Approve", systemImage: "checkmark")
                                 .frame(maxWidth: .infinity)
@@ -272,7 +259,6 @@ struct ParentApprovalSection: View {
                 }
                 .padding()
                 .background(.background, in: RoundedRectangle(cornerRadius: 22))
-                .transition(.move(edge: .trailing).combined(with: .scale(scale: 0.86)))
             }
         }
     }
@@ -410,9 +396,7 @@ struct ChoreCard: View {
             if chore.assignedTo == store.activeMemberID && chore.status != .awaitingApproval {
                 Button {
                     feedbackTrigger += 1
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.64)) {
-                        store.complete(chore)
-                    }
+                    store.complete(chore)
                 } label: {
                     Label("Done", systemImage: "checkmark.circle.fill")
                         .fontWeight(.semibold)
@@ -525,9 +509,7 @@ struct ClaimableView: View {
 
                             Button {
                                 feedbackTrigger += 1
-                                withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) {
-                                    store.claim(chore)
-                                }
+                                store.claim(chore)
                             } label: {
                                 Label("Claim", systemImage: "hand.raised.fill")
                                     .frame(maxWidth: .infinity)
@@ -536,7 +518,6 @@ struct ClaimableView: View {
                         }
                         .padding()
                         .background(.background, in: RoundedRectangle(cornerRadius: 22))
-                        .transition(.move(edge: .trailing).combined(with: .scale(scale: 0.84)))
                     }
                 }
             }
@@ -544,7 +525,6 @@ struct ClaimableView: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .sensoryFeedback(.selection, trigger: feedbackTrigger)
-        .animation(.spring(response: 0.42, dampingFraction: 0.7), value: store.claimableChores)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -553,43 +533,89 @@ struct ClaimableView: View {
     }
 }
 
-struct ActivityView: View {
+struct HistoryView: View {
     @EnvironmentObject private var store: ChoreStore
+    @State private var selectedDate = Date()
+
+    private var choresForDay: [Chore] {
+        if store.activeMember.role == .parent {
+            return store.completedChores(on: selectedDate)
+        }
+        return store.completedChores(on: selectedDate, for: store.activeMemberID)
+    }
 
     var body: some View {
-        List {
-            if store.activeMemberCompletedChores.isEmpty {
-                ContentUnavailableView(
-                    "No history yet",
-                    systemImage: "clock.arrow.circlepath",
-                    description: Text("Finished chores will show up here.")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                DatePicker(
+                    "History date",
+                    selection: $selectedDate,
+                    displayedComponents: .date
                 )
-            } else {
-                ForEach(store.activeMemberCompletedChores) { chore in
-                    HStack(spacing: 12) {
-                        Text(chore.emoji)
-                            .font(.title2)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .padding()
+                .background(.background, in: RoundedRectangle(cornerRadius: 22))
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(chore.title)
-                                .font(.headline)
-                            Text(chore.paidAt == nil && chore.rewardCents > 0 ? "Money owed" : "Complete")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                            .font(.title3.bold())
                         Spacer()
+                        Text("\(choresForDay.count) completed")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                        if chore.rewardCents > 0 {
-                            Text(money(chore.rewardCents))
-                                .font(.subheadline.bold())
+                    if choresForDay.isEmpty {
+                        EmptyHomeCard(
+                            emoji: "📅",
+                            title: "No completed chores",
+                            subtitle: store.activeMember.role == .parent
+                                ? "Nothing was completed by the family on this day."
+                                : "You didn’t complete any chores on this day."
+                        )
+                    } else {
+                        ForEach(choresForDay) { chore in
+                            HStack(spacing: 12) {
+                                Text(chore.emoji)
+                                    .font(.system(size: 28))
+                                    .frame(width: 48, height: 48)
+                                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(chore.title)
+                                        .font(.headline)
+
+                                    if store.activeMember.role == .parent {
+                                        Text(store.memberName(chore.assignedTo))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        Text(chore.paidAt == nil && chore.rewardCents > 0 ? "Money owed" : "Complete")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                Spacer()
+
+                                if chore.rewardCents > 0 {
+                                    Text(money(chore.rewardCents))
+                                        .font(.subheadline.bold())
+                                }
+                            }
+                            .padding()
+                            .background(.background, in: RoundedRectangle(cornerRadius: 18))
                         }
                     }
-                    .padding(.vertical, 4)
                 }
             }
+            .padding()
         }
+        .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("History")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func money(_ cents: Int) -> String {
@@ -614,8 +640,6 @@ struct ChoreEditorView: View {
     @State private var hasDueDate = false
     @State private var dueDate = Date()
 
-    private let emojiChoices = ["✨", "🧹", "🍽️", "🗑️", "🧺", "🛏️", "🐶", "🚿", "🌱", "🚗"]
-
     init(existingChore: Chore? = nil) {
         self.existingChore = existingChore
         _emoji = State(initialValue: existingChore?.emoji ?? "✨")
@@ -633,33 +657,18 @@ struct ChoreEditorView: View {
     var body: some View {
         Form {
             Section("Chore") {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(emojiChoices, id: \.self) { choice in
-                            Button {
-                                withAnimation(.spring(response: 0.28, dampingFraction: 0.6)) {
-                                    emoji = choice
-                                }
-                            } label: {
-                                Text(choice)
-                                    .font(.system(size: 26))
-                                    .frame(width: 48, height: 48)
-                                    .background(
-                                        emoji == choice ? Color.indigo.opacity(0.18) : Color.secondary.opacity(0.08),
-                                        in: RoundedRectangle(cornerRadius: 14)
-                                    )
-                                    .scaleEffect(emoji == choice ? 1.08 : 1)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+                HStack(spacing: 12) {
+                    TextField("😀", text: $emoji)
+                        .font(.title2)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 54)
 
-                HStack {
-                    TextField("Emoji", text: $emoji)
-                        .frame(width: 60)
                     TextField("What needs to be done?", text: $title)
                 }
+
+                Text("Tap the emoji field and use any emoji from your keyboard.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 TextField("Notes or instructions", text: $detail, axis: .vertical)
                     .lineLimit(2...5)
