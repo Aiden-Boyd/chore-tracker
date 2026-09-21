@@ -57,6 +57,7 @@ enum Recurrence: String, Codable, CaseIterable, Identifiable {
     case weekdays
     case weekly
     case monthly
+    case custom
 
     var id: String { rawValue }
 
@@ -67,6 +68,7 @@ enum Recurrence: String, Codable, CaseIterable, Identifiable {
         case .weekdays: "Weekdays"
         case .weekly: "Weekly"
         case .monthly: "Monthly"
+        case .custom: "Custom"
         }
     }
 }
@@ -87,6 +89,8 @@ struct Chore: Identifiable, Codable, Hashable {
     var rewardCents: Int
     var completedAt: Date?
     var paidAt: Date?
+    var customWeekdays: [Int]?
+    var weekInterval: Int?
 
     init(
         id: UUID = UUID(),
@@ -103,7 +107,9 @@ struct Chore: Identifiable, Codable, Hashable {
         requiresApproval: Bool = true,
         rewardCents: Int = 0,
         completedAt: Date? = nil,
-        paidAt: Date? = nil
+        paidAt: Date? = nil,
+        customWeekdays: [Int]? = nil,
+        weekInterval: Int? = nil
     ) {
         self.id = id
         self.emoji = emoji
@@ -120,6 +126,8 @@ struct Chore: Identifiable, Codable, Hashable {
         self.rewardCents = rewardCents
         self.completedAt = completedAt
         self.paidAt = paidAt
+        self.customWeekdays = customWeekdays
+        self.weekInterval = weekInterval
     }
 
     var rewardAmount: Double {
