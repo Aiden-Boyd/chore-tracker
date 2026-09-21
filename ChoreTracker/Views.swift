@@ -1047,6 +1047,8 @@ struct ChoreEditorView: View {
     @State private var rewardAmount: Double = 0
     @State private var hasDueDate = false
     @State private var dueDate = Date()
+    @State private var customWeekdays: Set<Int> = []
+    @State private var weekInterval = 1
     @State private var saveFeedback = 0
 
     init(existingChore: Chore? = nil) {
@@ -1061,11 +1063,14 @@ struct ChoreEditorView: View {
         _rewardAmount = State(initialValue: existingChore?.rewardAmount ?? 0)
         _hasDueDate = State(initialValue: existingChore?.dueDate != nil)
         _dueDate = State(initialValue: existingChore?.dueDate ?? Date())
+        _customWeekdays = State(initialValue: Set(existingChore?.customWeekdays ?? []))
+        _weekInterval = State(initialValue: max(1, existingChore?.weekInterval ?? 1))
     }
 
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (kind == .claimable || assignee != nil)
+        (kind == .claimable || assignee != nil) &&
+        (recurrence != .custom || !customWeekdays.isEmpty)
     }
 
     var body: some View {
@@ -1174,14 +1179,66 @@ struct ChoreEditorView: View {
                         }
                     }
 
-                    Toggle(isOn: $hasDueDate.animation(.snappy)) {
-                        Label("Set due date", systemImage: "clock")
+                    if recurrence == .custom {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Repeat on")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            HStack(spacing: 7) {
+                                ForEach(Array(zip([1, 2, 3, 4, 5, 6, 7], ["S", "M", "T", "W", "T", "F", "S"])), id: \.0) { weekday, label in
+                                    Button {
+                                        if customWeekdays.contains(weekday) {
+                                            customWeekdays.remove(weekday)
+                                        } else {
+                                            customWeekdays.insert(weekday)
+                                        }
+                                    } label: {
+                                        Text(label)
+                                            .font(.subheadline.bold())
+                                            .frame(width: 36, height: 36)
+                                            .foregroundStyle(customWeekdays.contains(weekday) ? Color.white : Color.primary)
+                                            .background(
+                                                customWeekdays.contains(weekday) ? Color.indigo : Color.secondary.opacity(0.1),
+                                                in: Circle()
+                                            )
+                                    }
+                                    .buttonStyle(SoftPressStyle())
+                                }
+                            }
+
+                            Stepper(value: $weekInterval, in: 1...8) {
+                                HStack {
+                                    Text("Repeat")
+                                    Spacer()
+                                    Text(weekInterval == 1 ? "Every week" : "Every \(weekInterval) weeks")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .font(.subheadline)
+                            }
+
+                            if customWeekdays.isEmpty {
+                                Label("Choose at least one day", systemImage: "exclamationmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
+                    Toggle(isOn: $hasDueDate.animation(.easeOut(duration: 0.16))) {
+                        Label("Set due date & time", systemImage: "clock")
                     }
 
                     if hasDueDate {
-                        DatePicker("Due", selection: $dueDate)
-                            .datePickerStyle(.compact)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                        VStack(spacing: 10) {
+                            DatePicker("Date", selection: $dueDate, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+
+                            DatePicker("Time", selection: $dueDate, displayedComponents: .hourAndMinute)
+                                .datePickerStyle(.compact)
+                        }
+                        .transition(.opacity)
                     }
                 }
 
@@ -1364,7 +1421,9 @@ struct ChoreEditorView: View {
                 dueDate: hasDueDate ? dueDate : nil,
                 assignee: assignee,
                 requiresApproval: requiresApproval,
-                rewardCents: cents
+                rewardCents: cents,
+                customWeekdays: recurrence == .custom ? Array(customWeekdays).sorted() : nil,
+                weekInterval: recurrence == .custom ? weekInterval : nil
             )
         } else {
             store.addChore(
@@ -1376,7 +1435,9 @@ struct ChoreEditorView: View {
                 dueDate: hasDueDate ? dueDate : nil,
                 assignee: assignee,
                 requiresApproval: requiresApproval,
-                rewardCents: cents
+                rewardCents: cents,
+                customWeekdays: recurrence == .custom ? Array(customWeekdays).sorted() : nil,
+                weekInterval: recurrence == .custom ? weekInterval : nil
             )
         }
     }
