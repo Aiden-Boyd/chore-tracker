@@ -21,9 +21,9 @@ struct AuthenticationView: View {
                         EmptyView()
                     }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .transition(.opacity)
             }
-            .animation(.snappy(duration: 0.28), value: auth.stage)
+            .animation(.easeInOut(duration: 0.18), value: auth.stage)
         }
     }
 }
@@ -50,7 +50,7 @@ struct AuthHeader: View {
                         Capsule()
                             .fill(item <= step ? Color.indigo : Color.secondary.opacity(0.18))
                             .frame(width: item == step ? 26 : 8, height: 8)
-                            .animation(.snappy, value: step)
+                            .animation(.easeInOut(duration: 0.18), value: step)
                     }
                 }
             }
@@ -150,7 +150,7 @@ struct EmailAddressView: View {
                         RoundedRectangle(cornerRadius: 17)
                             .stroke(focused ? Color.indigo.opacity(0.55) : Color.secondary.opacity(0.12), lineWidth: focused ? 1.5 : 1)
                     )
-                    .animation(.snappy, value: focused)
+                    .animation(.easeOut(duration: 0.14), value: focused)
 
                     Text("We’ll email you a 6-digit code. No password to remember.")
                         .font(.caption)
