@@ -274,7 +274,9 @@ final class ChoreStore: ObservableObject {
         dueDate: Date?,
         assignee: UUID?,
         requiresApproval: Bool,
-        rewardCents: Int
+        rewardCents: Int,
+        customWeekdays: [Int]? = nil,
+        weekInterval: Int? = nil
     ) {
         recordUndo("Chore added")
 
@@ -287,7 +289,9 @@ final class ChoreStore: ObservableObject {
             dueDate: dueDate,
             assignedTo: kind == .assigned ? assignee : nil,
             requiresApproval: requiresApproval,
-            rewardCents: rewardCents
+            rewardCents: rewardCents,
+            customWeekdays: customWeekdays,
+            weekInterval: weekInterval
         )
         chores.insert(chore, at: 0)
     }
@@ -302,7 +306,9 @@ final class ChoreStore: ObservableObject {
         dueDate: Date?,
         assignee: UUID?,
         requiresApproval: Bool,
-        rewardCents: Int
+        rewardCents: Int,
+        customWeekdays: [Int]? = nil,
+        weekInterval: Int? = nil
     ) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
         recordUndo("Changes saved")
@@ -316,6 +322,8 @@ final class ChoreStore: ObservableObject {
         chores[index].claimedBy = kind == .claimable ? nil : chores[index].claimedBy
         chores[index].requiresApproval = requiresApproval
         chores[index].rewardCents = rewardCents
+        chores[index].customWeekdays = customWeekdays
+        chores[index].weekInterval = weekInterval
     }
 
     func delete(_ chore: Chore) {
@@ -379,7 +387,12 @@ final class ChoreStore: ObservableObject {
         guard chore.recurrence != .once else { return }
 
         let base = chore.dueDate ?? .now
-        guard let nextDate = nextDueDate(after: base, recurrence: chore.recurrence) else { return }
+        guard let nextDate = nextDueDate(
+            after: base,
+            recurrence: chore.recurrence,
+            customWeekdays: chore.customWeekdays,
+            weekInterval: chore.weekInterval
+        ) else { return }
 
         let nextAvailable = Calendar.current.startOfDay(for: nextDate)
 
@@ -395,12 +408,19 @@ final class ChoreStore: ObservableObject {
             claimedBy: nil,
             status: .open,
             requiresApproval: chore.requiresApproval,
-            rewardCents: chore.rewardCents
+            rewardCents: chore.rewardCents,
+            customWeekdays: chore.customWeekdays,
+            weekInterval: chore.weekInterval
         )
         chores.insert(next, at: 0)
     }
 
-    private func nextDueDate(after date: Date, recurrence: Recurrence) -> Date? {
+    private func nextDueDate(
+        after date: Date,
+        recurrence: Recurrence,
+        customWeekdays: [Int]? = nil,
+        weekInterval: Int? = nil
+    ) -> Date? {
         let calendar = Calendar.current
 
         switch recurrence {
@@ -418,6 +438,31 @@ final class ChoreStore: ObservableObject {
                 candidate = calendar.date(byAdding: .day, value: 1, to: candidate) ?? candidate
             }
             return candidate
+        case .custom:
+            let weekdays = Set((customWeekdays ?? []).filter { (1...7).contains($0) })
+            guard !weekdays.isEmpty else {
+                return calendar.date(byAdding: .day, value: 7, to: date)
+            }
+
+            let interval = max(1, weekInterval ?? 1)
+            let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
+
+            for dayOffset in 1...(7 * interval + 7) {
+                guard let candidate = calendar.date(byAdding: .day, value: dayOffset, to: date) else { continue }
+                let weekday = calendar.component(.weekday, from: candidate)
+                guard weekdays.contains(weekday) else { continue }
+
+                if interval == 1 {
+                    return candidate
+                }
+
+                let candidateWeek = calendar.dateInterval(of: .weekOfYear, for: candidate)?.start ?? candidate
+                let weeks = calendar.dateComponents([.weekOfYear], from: startOfWeek, to: candidateWeek).weekOfYear ?? 0
+                if weeks % interval == 0 {
+                    return candidate
+                }
+            }
+            return nil
         }
     }
 
