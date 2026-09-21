@@ -128,6 +128,14 @@ struct ProfileView: View {
                     } label: {
                         Label("Add child", systemImage: "person.badge.plus")
                     }
+
+                    if !store.archivedChildren.isEmpty {
+                        NavigationLink {
+                            ArchivedChildrenView()
+                        } label: {
+                            Label("Archived children", systemImage: "archivebox")
+                        }
+                    }
                 }
             }
 
@@ -148,6 +156,12 @@ struct ProfileView: View {
                         "Completed chores",
                         value: "\(store.activeMemberCompletedChores.count)"
                     )
+
+                    NavigationLink {
+                        MoneyLedgerView(memberID: store.activeMemberID)
+                    } label: {
+                        Label("Money history", systemImage: "list.bullet.rectangle")
+                    }
                 }
             }
         }
@@ -302,6 +316,12 @@ struct ChildProfileView: View {
                             value: (Double(store.moneyOwedCents(to: memberID)) / 100)
                                 .formatted(.currency(code: "USD"))
                         )
+
+                        NavigationLink {
+                            MoneyLedgerView(memberID: memberID)
+                        } label: {
+                            Label("Money history", systemImage: "list.bullet.rectangle")
+                        }
                     }
 
                     Section("Profile") {
@@ -330,11 +350,11 @@ struct ChildProfileView: View {
 
                     if member.isManagedProfile {
                         Section {
-                            Button("Remove Child", role: .destructive) {
+                            Button("Archive Child", role: .destructive) {
                                 showingRemoveConfirmation = true
                             }
                         } footer: {
-                            Text("Removing this child also removes chores and history currently tied to this local profile.")
+                            Text("Archiving hides this child from active household lists but keeps chores, rewards, and history.")
                         }
                     }
                 }
@@ -355,17 +375,17 @@ struct ChildProfileView: View {
                     .presentationDragIndicator(.visible)
                 }
                 .confirmationDialog(
-                    "Remove \(member.name)?",
+                    "Archive \(member.name)?",
                     isPresented: $showingRemoveConfirmation,
                     titleVisibility: .visible
                 ) {
-                    Button("Remove Child", role: .destructive) {
-                        store.removeManagedChild(memberID)
+                    Button("Archive Child", role: .destructive) {
+                        store.archiveManagedChild(memberID)
                         dismiss()
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("This removes the managed profile and chores/history associated with it on this device.")
+                    Text("This keeps all history and rewards but removes the child from active household lists.")
                 }
             } else {
                 ContentUnavailableView(
@@ -516,5 +536,172 @@ struct ConnectChildAccountView: View {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         }
+    }
+}
+
+
+struct MoneyLedgerView: View {
+    @EnvironmentObject private var store: ChoreStore
+
+    let memberID: UUID
+
+    private var entries: [Chore] {
+        store.ledgerEntries(for: memberID)
+    }
+
+    private var memberName: String {
+        store.memberName(memberID)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 12) {
+                    ledgerSummary(
+                        title: "Earned",
+                        amount: store.totalEarnedCents(for: memberID),
+                        icon: "dollarsign.circle.fill"
+                    )
+
+                    ledgerSummary(
+                        title: "Paid",
+                        amount: store.totalPaidCents(for: memberID),
+                        icon: "checkmark.circle.fill"
+                    )
+
+                    ledgerSummary(
+                        title: "Owed",
+                        amount: store.moneyOwedCents(to: memberID),
+                        icon: "clock.fill"
+                    )
+                }
+                .listRowInsets(EdgeInsets())
+                .padding(.vertical, 8)
+            }
+
+            Section("Activity") {
+                if entries.isEmpty {
+                    ContentUnavailableView(
+                        "No reward history",
+                        systemImage: "dollarsign.circle",
+                        description: Text("Completed chores with rewards will appear here.")
+                    )
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(entries) { chore in
+                        HStack(spacing: 12) {
+                            Text(chore.emoji)
+                                .font(.title3)
+                                .frame(width: 42, height: 42)
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(chore.title)
+                                    .font(.body.weight(.medium))
+
+                                Text(ledgerSubtitle(chore))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            VStack(alignment: .trailing, spacing: 3) {
+                                Text(money(chore.rewardCents))
+                                    .font(.subheadline.bold())
+
+                                Text(chore.paidAt == nil ? "Owed" : "Paid")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(chore.paidAt == nil ? .orange : .green)
+                            }
+                        }
+                        .padding(.vertical, 3)
+                    }
+                }
+            }
+        }
+        .navigationTitle("\(memberName)’s Money")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func ledgerSummary(title: String, amount: Int, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: icon)
+                .foregroundStyle(.indigo)
+
+            Text(money(amount))
+                .font(.headline)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func ledgerSubtitle(_ chore: Chore) -> String {
+        let completed = chore.completedAt?.formatted(date: .abbreviated, time: .shortened) ?? "Completed"
+        if let paidAt = chore.paidAt {
+            return "\(completed) · Paid \(paidAt.formatted(date: .abbreviated, time: .omitted))"
+        }
+        return completed
+    }
+
+    private func money(_ cents: Int) -> String {
+        (Double(cents) / 100).formatted(.currency(code: "USD"))
+    }
+}
+
+struct ArchivedChildrenView: View {
+    @EnvironmentObject private var store: ChoreStore
+
+    var body: some View {
+        List {
+            if store.archivedChildren.isEmpty {
+                ContentUnavailableView(
+                    "No archived children",
+                    systemImage: "archivebox",
+                    description: Text("Archived household members will appear here.")
+                )
+            } else {
+                ForEach(store.archivedChildren) { child in
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(.secondary.opacity(0.12))
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Text(String(child.name.prefix(1)).uppercased())
+                                    .font(.subheadline.bold())
+                            )
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(child.name)
+                                .font(.body.weight(.medium))
+
+                            Text("History and rewards preserved")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button("Restore") {
+                            store.restoreManagedChild(child.id)
+                        }
+                        .font(.subheadline.bold())
+                    }
+
+                    NavigationLink {
+                        MoneyLedgerView(memberID: child.id)
+                    } label: {
+                        Label("View \(child.name)’s money history", systemImage: "dollarsign.circle")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Archived Children")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
