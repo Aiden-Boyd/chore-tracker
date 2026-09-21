@@ -17,6 +17,11 @@ struct ContentView: View {
             NavigationStack { HistoryView() }
                 .tabItem { Label("History", systemImage: "calendar") }
 
+            if store.activeMember.role == .parent {
+                NavigationStack { PaymentHistoryView() }
+                    .tabItem { Label("Payments", systemImage: "banknote.fill") }
+            }
+
             NavigationStack { ProfileView() }
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
@@ -678,6 +683,285 @@ struct MoneyLedgerView: View {
             return "\(completed) · Paid \(paidAt.formatted(date: .abbreviated, time: .omitted))"
         }
         return completed
+    }
+
+    private func money(_ cents: Int) -> String {
+        (Double(cents) / 100).formatted(.currency(code: "USD"))
+    }
+}
+
+private enum PaymentHistoryScope: String, CaseIterable, Identifiable {
+    case weekly = "Weekly"
+    case monthly = "Monthly"
+
+    var id: String { rawValue }
+
+    var calendarComponent: Calendar.Component {
+        switch self {
+        case .weekly: .weekOfYear
+        case .monthly: .month
+        }
+    }
+}
+
+struct PaymentHistoryView: View {
+    @EnvironmentObject private var store: ChoreStore
+
+    @State private var scope: PaymentHistoryScope = .weekly
+    @State private var periodOffset = 0
+
+    private var calendar: Calendar { .current }
+
+    private var periodDate: Date {
+        calendar.date(
+            byAdding: scope.calendarComponent,
+            value: periodOffset,
+            to: .now
+        ) ?? .now
+    }
+
+    private var interval: DateInterval {
+        calendar.dateInterval(of: scope.calendarComponent, for: periodDate)
+            ?? DateInterval(start: calendar.startOfDay(for: periodDate), duration: 86_400)
+    }
+
+    private var children: [FamilyMember] {
+        store.children + store.archivedChildren
+    }
+
+    private var totalPaidCents: Int {
+        children.reduce(0) { total, child in
+            total + paidEntries(for: child.id).reduce(0) { $0 + $1.rewardCents }
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Payment period", selection: $scope) {
+                    ForEach(PaymentHistoryScope.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+
+            Section {
+                HStack(spacing: 14) {
+                    Button {
+                        periodOffset -= 1
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .frame(width: 38, height: 38)
+                            .background(.quaternary, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Previous \(scope.rawValue.lowercased()) period")
+
+                    VStack(spacing: 3) {
+                        Text(periodTitle)
+                            .font(.headline)
+
+                        Text(periodOffset == 0 ? "Current period" : "Past period")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    Button {
+                        periodOffset += 1
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .frame(width: 38, height: 38)
+                            .background(.quaternary, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(periodOffset >= 0)
+                    .accessibilityLabel("Next \(scope.rawValue.lowercased()) period")
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                HStack(spacing: 14) {
+                    Image(systemName: "banknote.fill")
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                        .frame(width: 48, height: 48)
+                        .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 15))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(money(totalPaidCents))
+                            .font(.title2.bold())
+
+                        Text("Paid across the household")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+                .padding(.vertical, 5)
+            }
+
+            Section("By child") {
+                if children.isEmpty {
+                    ContentUnavailableView(
+                        "No children yet",
+                        systemImage: "person.2",
+                        description: Text("Add a child to begin tracking payments.")
+                    )
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(children) { child in
+                        let entries = paidEntries(for: child.id)
+                        let amount = entries.reduce(0) { $0 + $1.rewardCents }
+
+                        NavigationLink {
+                            ChildPaymentPeriodView(
+                                member: child,
+                                entries: entries,
+                                periodTitle: periodTitle
+                            )
+                        } label: {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(.indigo.opacity(0.12))
+                                    .frame(width: 42, height: 42)
+                                    .overlay(
+                                        Text(String(child.name.prefix(1)).uppercased())
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(.indigo)
+                                    )
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text(child.name)
+                                            .font(.body.weight(.medium))
+
+                                        if child.archivedAt != nil {
+                                            Text("Archived")
+                                                .font(.caption2.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(.quaternary, in: Capsule())
+                                        }
+                                    }
+
+                                    Text(entries.isEmpty
+                                         ? "No payments"
+                                         : "\(entries.count) rewarded chore\(entries.count == 1 ? "" : "s")")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Text(money(amount))
+                                    .font(.headline)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Payments")
+        .onChange(of: scope) { _, _ in
+            periodOffset = 0
+        }
+    }
+
+    private var periodTitle: String {
+        switch scope {
+        case .weekly:
+            let lastDay = interval.end.addingTimeInterval(-1)
+            return "\(interval.start.formatted(date: .abbreviated, time: .omitted)) – \(lastDay.formatted(date: .abbreviated, time: .omitted))"
+        case .monthly:
+            return periodDate.formatted(.dateTime.month(.wide).year())
+        }
+    }
+
+    private func paidEntries(for memberID: UUID) -> [Chore] {
+        store.ledgerEntries(for: memberID)
+            .filter { chore in
+                guard let paidAt = chore.paidAt else { return false }
+                return interval.contains(paidAt)
+            }
+            .sorted { ($0.paidAt ?? .distantPast) > ($1.paidAt ?? .distantPast) }
+    }
+
+    private func money(_ cents: Int) -> String {
+        (Double(cents) / 100).formatted(.currency(code: "USD"))
+    }
+}
+
+private struct ChildPaymentPeriodView: View {
+    let member: FamilyMember
+    let entries: [Chore]
+    let periodTitle: String
+
+    private var totalPaidCents: Int {
+        entries.reduce(0) { $0 + $1.rewardCents }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(money(totalPaidCents))
+                        .font(.largeTitle.bold())
+
+                    Text("Paid during \(periodTitle)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 8)
+            }
+
+            Section("Paid chores") {
+                if entries.isEmpty {
+                    ContentUnavailableView(
+                        "No payments",
+                        systemImage: "banknote",
+                        description: Text("No money was marked paid to \(member.name) during this period.")
+                    )
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(entries) { chore in
+                        HStack(spacing: 12) {
+                            Text(chore.emoji)
+                                .font(.title3)
+                                .frame(width: 42, height: 42)
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(chore.title)
+                                    .font(.body.weight(.medium))
+
+                                if let paidAt = chore.paidAt {
+                                    Text("Paid \(paidAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Spacer()
+
+                            Text(money(chore.rewardCents))
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.green)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                }
+            }
+        }
+        .navigationTitle(member.name)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func money(_ cents: Int) -> String {
