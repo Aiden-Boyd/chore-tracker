@@ -62,7 +62,7 @@ final class AuthStore: ObservableObject {
             try await EmailAuthService.shared.requestCode(for: normalizedEmail)
             stage = .code
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyMessage(for: error)
         }
 
         isLoading = false
@@ -85,10 +85,27 @@ final class AuthStore: ObservableObject {
             try KeychainStore.shared.save(token, for: "auth-token")
             stage = .profile
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyMessage(for: error)
         }
 
         isLoading = false
+    }
+
+    private func friendlyMessage(for error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "You’re offline. Check your connection and try again."
+            case .cannotConnectToHost, .cannotFindHost:
+                return "The sign-in service isn’t reachable right now. Try again in a moment."
+            case .timedOut:
+                return "The sign-in request timed out. Try again."
+            default:
+                break
+            }
+        }
+
+        return error.localizedDescription
     }
 
     func finishProfile() {
