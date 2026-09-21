@@ -25,6 +25,7 @@ struct ContentView: View {
 
 struct ProfileView: View {
     @EnvironmentObject private var store: ChoreStore
+    @EnvironmentObject private var auth: AuthStore
 
     var body: some View {
         List {
@@ -34,6 +35,13 @@ struct ProfileView: View {
                         Text("\(member.name) · \(member.role.rawValue.capitalized)")
                             .tag(member.id)
                     }
+                }
+            }
+
+            Section("Account") {
+                LabeledContent("Phone", value: auth.normalizedPhoneNumber)
+                Button("Sign Out", role: .destructive) {
+                    auth.signOut()
                 }
             }
 
