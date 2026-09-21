@@ -11,10 +11,10 @@ struct ContentView: View {
             if store.activeMember.role == .child {
                 NavigationStack { ClaimableView() }
                     .tabItem { Label("Claim", systemImage: "hand.raised.fill") }
-
-                NavigationStack { ActivityView() }
-                    .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             }
+
+            NavigationStack { HistoryView() }
+                .tabItem { Label("History", systemImage: "calendar") }
 
             NavigationStack { ProfileView() }
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
