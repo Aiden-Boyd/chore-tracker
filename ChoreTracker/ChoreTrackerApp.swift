@@ -9,13 +9,24 @@ struct ChoreTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if auth.stage == .signedIn {
-                    ContentView()
-                } else {
-                    AuthenticationView()
+            ZStack(alignment: .top) {
+                Group {
+                    if auth.stage == .signedIn {
+                        ContentView()
+                    } else {
+                        AuthenticationView()
+                    }
+                }
+
+                if network.state != .online {
+                    NetworkStatusBanner(state: network.state)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(10)
                 }
             }
+            .animation(.easeOut(duration: 0.2), value: network.state)
             .environmentObject(store)
             .environmentObject(auth)
             .environmentObject(notifications)
