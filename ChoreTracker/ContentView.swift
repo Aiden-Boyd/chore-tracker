@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: ChoreStore
+    @EnvironmentObject private var notifications: NotificationManager
 
     var body: some View {
         TabView {
@@ -33,6 +34,15 @@ struct ContentView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: store.undoMessage)
+        .task {
+            await notifications.reschedule(for: store)
+        }
+        .onChange(of: store.chores) { _, _ in
+            Task { await notifications.reschedule(for: store) }
+        }
+        .onChange(of: store.activeMemberID) { _, _ in
+            Task { await notifications.reschedule(for: store) }
+        }
     }
 }
 
@@ -141,6 +151,13 @@ struct ProfileView: View {
 
             Section("Account") {
                 LabeledContent("Email", value: auth.normalizedEmail)
+
+                NavigationLink {
+                    NotificationSettingsView()
+                } label: {
+                    Label("Notifications", systemImage: "bell.badge")
+                }
+
                 Button("Sign Out", role: .destructive) {
                     auth.signOut()
                 }
@@ -703,5 +720,118 @@ struct ArchivedChildrenView: View {
         }
         .navigationTitle("Archived Children")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+struct NotificationSettingsView: View {
+    @EnvironmentObject private var store: ChoreStore
+    @EnvironmentObject private var notifications: NotificationManager
+
+    @AppStorage(NotificationManager.Keys.notificationsEnabled)
+    private var notificationsEnabled = true
+
+    @AppStorage(NotificationManager.Keys.dueReminders)
+    private var dueReminders = true
+
+    @AppStorage(NotificationManager.Keys.overdueReminders)
+    private var overdueReminders = true
+
+    @AppStorage(NotificationManager.Keys.approvalReminders)
+    private var approvalReminders = true
+
+    @AppStorage(NotificationManager.Keys.reminderLeadMinutes)
+    private var reminderLeadMinutes = 60
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Allow chore notifications", isOn: $notificationsEnabled)
+            } footer: {
+                Text(statusText)
+            }
+
+            if notificationsEnabled {
+                if store.activeMember.role == .child {
+                    Section("Chore reminders") {
+                        Toggle("Due soon", isOn: $dueReminders)
+                        Toggle("Overdue chores", isOn: $overdueReminders)
+
+                        if dueReminders {
+                            Picker("Remind me", selection: $reminderLeadMinutes) {
+                                Text("15 minutes before").tag(15)
+                                Text("30 minutes before").tag(30)
+                                Text("1 hour before").tag(60)
+                                Text("2 hours before").tag(120)
+                                Text("1 day before").tag(1440)
+                            }
+                        }
+                    }
+                } else {
+                    Section("Parent reminders") {
+                        Toggle("Chores waiting for approval", isOn: $approvalReminders)
+                    }
+                }
+
+                Section {
+                    Button {
+                        Task {
+                            await notifications.requestPermission()
+                            await notifications.reschedule(for: store)
+                        }
+                    } label: {
+                        Label(permissionButtonTitle, systemImage: "bell.badge.fill")
+                    }
+                }
+            }
+
+            Section {
+                Text("Due and overdue reminders are scheduled locally on this device. Cross-device assignment and approval alerts will become push notifications once household sync is connected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Notifications")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await notifications.refreshAuthorizationStatus()
+        }
+        .onChange(of: notificationsEnabled) { _, _ in reschedule() }
+        .onChange(of: dueReminders) { _, _ in reschedule() }
+        .onChange(of: overdueReminders) { _, _ in reschedule() }
+        .onChange(of: approvalReminders) { _, _ in reschedule() }
+        .onChange(of: reminderLeadMinutes) { _, _ in reschedule() }
+    }
+
+    private var statusText: String {
+        switch notifications.authorizationStatus {
+        case .authorized, .provisional:
+            return "Notifications are allowed on this device."
+        case .denied:
+            return "Notifications are blocked in iOS Settings."
+        case .notDetermined:
+            return "Turn on reminders, then allow notifications when iOS asks."
+        case .ephemeral:
+            return "Notifications are temporarily allowed."
+        @unknown default:
+            return "Notification permission status is unavailable."
+        }
+    }
+
+    private var permissionButtonTitle: String {
+        switch notifications.authorizationStatus {
+        case .authorized, .provisional:
+            return "Refresh notification schedule"
+        case .denied:
+            return "Notifications blocked in Settings"
+        default:
+            return "Allow Notifications"
+        }
+    }
+
+    private func reschedule() {
+        Task {
+            await notifications.reschedule(for: store)
+        }
     }
 }
