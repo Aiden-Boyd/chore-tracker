@@ -86,7 +86,11 @@ final class ChoreStore: ObservableObject {
     }
 
     var children: [FamilyMember] {
-        members.filter { $0.role == .child }
+        members.filter { $0.role == .child && $0.archivedAt == nil }
+    }
+
+    var archivedChildren: [FamilyMember] {
+        members.filter { $0.role == .child && $0.archivedAt != nil }
     }
 
     var myOpenChores: [Chore] {
@@ -190,19 +194,43 @@ final class ChoreStore: ObservableObject {
         members[index].name = cleanName
     }
 
-    func removeManagedChild(_ memberID: UUID) {
-        guard let member = members.first(where: { $0.id == memberID }),
-              member.role == .child,
-              member.isManagedProfile else { return }
+    func archiveManagedChild(_ memberID: UUID) {
+        guard let index = members.firstIndex(where: { $0.id == memberID }),
+              members[index].role == .child,
+              members[index].isManagedProfile else { return }
 
-        chores.removeAll {
-            $0.assignedTo == memberID || $0.claimedBy == memberID
-        }
-        members.removeAll { $0.id == memberID }
+        members[index].archivedAt = .now
 
         if activeMemberID == memberID, let parent = members.first(where: { $0.role == .parent }) {
             activeMemberID = parent.id
         }
+    }
+
+    func restoreManagedChild(_ memberID: UUID) {
+        guard let index = members.firstIndex(where: { $0.id == memberID }),
+              members[index].role == .child,
+              members[index].isManagedProfile else { return }
+
+        members[index].archivedAt = nil
+    }
+
+    func ledgerEntries(for memberID: UUID) -> [Chore] {
+        completedChores
+            .filter {
+                ($0.assignedTo == memberID || $0.claimedBy == memberID) &&
+                $0.rewardCents > 0
+            }
+            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+    }
+
+    func totalEarnedCents(for memberID: UUID) -> Int {
+        ledgerEntries(for: memberID).reduce(0) { $0 + $1.rewardCents }
+    }
+
+    func totalPaidCents(for memberID: UUID) -> Int {
+        ledgerEntries(for: memberID)
+            .filter { $0.paidAt != nil }
+            .reduce(0) { $0 + $1.rewardCents }
     }
 
     func claim(_ chore: Chore) {
