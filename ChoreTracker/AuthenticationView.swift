@@ -364,7 +364,7 @@ struct AccountProfileView: View {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
             }
-            .foregroundStyle(selected ? .white : .primary)
+            .foregroundStyle(selected ? Color.white : Color.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(selected ? Color.indigo : Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 17))
