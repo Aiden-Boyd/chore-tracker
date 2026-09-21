@@ -1,28 +1,38 @@
 # Chore Tracker
 
-A native SwiftUI family chores app inspired by the simplicity of Choresy, with a stronger family workflow.
+A native SwiftUI family chores app focused on a simple household workflow.
 
-## V1 features
+## Current prototype
 
-- Parent and child views
-- Assigned chores
-- Claimable family chores
-- Daily / weekly / monthly recurrence metadata
-- Mark chores complete
-- Optional parent approval
-- Parent approval queue
-- Create new assigned or claimable chores
-- Local prototype state with sample household data
+### Parent
+- Home is the main control center
+- Add chores directly from Home
+- Assigned or claimable chores
+- Emoji for every chore
+- Dollar rewards instead of points
+- See total money owed and what is owed to each child
+- Mark a child's owed balance paid
+- Approve completed chores
+- Edit or delete active chores
+- Recurring schedules and due dates
+
+### Child
+- See assigned chores
+- See money currently owed
+- Claim open family chores
+- Complete chores with spring animations and haptic feedback
+- View completed chore history
 
 ## Run
 
-This repo uses XcodeGen so the project stays easy to maintain.
+This repo uses XcodeGen.
 
 1. Install XcodeGen if needed:
    `brew install xcodegen`
 2. From the repo root:
    `xcodegen generate`
-3. Open `ChoreTracker.xcodeproj`
+3. Open:
+   `open ChoreTracker.xcodeproj`
 4. Run on iOS 17+.
 
-The current version is an offline prototype. The next backend step is household accounts + sync (CloudKit or a small API).
+The current build stores data locally. Account setup and family sync are the next backend-level steps.
