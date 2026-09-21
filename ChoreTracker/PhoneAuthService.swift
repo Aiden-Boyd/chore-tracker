@@ -5,7 +5,7 @@ enum AuthConfiguration {
     static let apiBaseURL = URL(string: "http://127.0.0.1:3000")!
     #else
     // Change this to your production VPS API URL before App Store release.
-    static let apiBaseURL = URL(string: "https://api.example.com")!
+    static let apiBaseURL = URL(string: "https://auth.newlifemedia.co")!
     #endif
 }
 
@@ -28,23 +28,21 @@ actor EmailAuthService {
 
     private struct RequestCodeBody: Encodable {
         let email: String
+        let type = "sign-in"
     }
 
     private struct VerifyBody: Encodable {
         let email: String
-        let code: String
+        let otp: String
     }
 
-    private struct VerifyResponse: Decodable {
-        let token: String
-    }
-
-    private struct ErrorResponse: Decodable {
-        let error: String
+        private struct ErrorResponse: Decodable {
+        let message: String?
+        let error: String?
     }
 
     func requestCode(for email: String) async throws {
-        let url = AuthConfiguration.apiBaseURL.appending(path: "auth/request-code")
+        let url = AuthConfiguration.apiBaseURL.appending(path: "api/auth/email-otp/send-verification-otp")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -55,21 +53,22 @@ actor EmailAuthService {
     }
 
     func verify(email: String, code: String) async throws -> String {
-        let url = AuthConfiguration.apiBaseURL.appending(path: "auth/verify-code")
+        let url = AuthConfiguration.apiBaseURL.appending(path: "api/auth/sign-in/email-otp")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(VerifyBody(email: email, code: code))
+        request.httpBody = try JSONEncoder().encode(VerifyBody(email: email, otp: code))
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
 
-        guard let result = try? JSONDecoder().decode(VerifyResponse.self, from: data),
-              !result.token.isEmpty else {
+        guard let http = response as? HTTPURLResponse,
+              let token = http.value(forHTTPHeaderField: "set-auth-token"),
+              !token.isEmpty else {
             throw AuthError.invalidResponse
         }
 
-        return result.token
+        return token
     }
 
     private func validate(response: URLResponse, data: Data) throws {
@@ -79,7 +78,7 @@ actor EmailAuthService {
 
         guard (200..<300).contains(http.statusCode) else {
             if let result = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw AuthError.server(result.error)
+                throw AuthError.server(result.message ?? result.error ?? "Authentication failed. Please try again.")
             }
             throw AuthError.server("Authentication failed. Please try again.")
         }
