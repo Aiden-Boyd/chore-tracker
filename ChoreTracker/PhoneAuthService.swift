@@ -1,39 +1,87 @@
 import Foundation
 
-actor PhoneAuthService {
-    static let shared = PhoneAuthService()
+enum AuthConfiguration {
+    #if DEBUG
+    static let apiBaseURL = URL(string: "http://127.0.0.1:3000")!
+    #else
+    // Change this to your production VPS API URL before App Store release.
+    static let apiBaseURL = URL(string: "https://api.example.com")!
+    #endif
+}
 
-    enum PhoneAuthError: LocalizedError {
-        case invalidCode
-        case backendNotConfigured
+actor EmailAuthService {
+    static let shared = EmailAuthService()
+
+    enum AuthError: LocalizedError {
+        case invalidResponse
+        case server(String)
 
         var errorDescription: String? {
             switch self {
-            case .invalidCode:
-                return "That verification code is not correct."
-            case .backendNotConfigured:
-                return "Phone verification backend is not connected yet."
+            case .invalidResponse:
+                return "The authentication server returned an invalid response."
+            case .server(let message):
+                return message
             }
         }
     }
 
-    // Development-only verification code.
-    // Replace this service with the production SMS API before TestFlight/App Store release.
-    private let developmentCode = "123456"
-
-    func requestCode(for phoneNumber: String) async throws {
-        guard phoneNumber.count >= 11 else {
-            throw PhoneAuthError.backendNotConfigured
-        }
-
-        try await Task.sleep(for: .milliseconds(450))
+    private struct RequestCodeBody: Encodable {
+        let email: String
     }
 
-    func verify(phoneNumber: String, code: String) async throws {
-        try await Task.sleep(for: .milliseconds(350))
+    private struct VerifyBody: Encodable {
+        let email: String
+        let code: String
+    }
 
-        guard code == developmentCode else {
-            throw PhoneAuthError.invalidCode
+    private struct VerifyResponse: Decodable {
+        let token: String
+    }
+
+    private struct ErrorResponse: Decodable {
+        let error: String
+    }
+
+    func requestCode(for email: String) async throws {
+        let url = AuthConfiguration.apiBaseURL.appending(path: "auth/request-code")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(RequestCodeBody(email: email))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func verify(email: String, code: String) async throws -> String {
+        let url = AuthConfiguration.apiBaseURL.appending(path: "auth/verify-code")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(VerifyBody(email: email, code: code))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+
+        guard let result = try? JSONDecoder().decode(VerifyResponse.self, from: data),
+              !result.token.isEmpty else {
+            throw AuthError.invalidResponse
+        }
+
+        return result.token
+    }
+
+    private func validate(response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            if let result = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw AuthError.server(result.error)
+            }
+            throw AuthError.server("Authentication failed. Please try again.")
         }
     }
 }
