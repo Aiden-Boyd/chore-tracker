@@ -5,36 +5,25 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            NavigationStack {
-                HomeView()
-            }
-            .tabItem {
-                Label("Home", systemImage: "house.fill")
-            }
+            NavigationStack { HomeView() }
+                .tabItem { Label("Home", systemImage: "house.fill") }
 
-            NavigationStack {
-                ClaimableView()
-            }
-            .tabItem {
-                Label("Claim", systemImage: "hand.raised.fill")
-            }
+            NavigationStack { ClaimableView() }
+                .tabItem { Label("Claim", systemImage: "hand.raised.fill") }
+
+            NavigationStack { ActivityView() }
+                .tabItem { Label("Activity", systemImage: "clock.arrow.circlepath") }
 
             if store.activeMember.role == .parent {
-                NavigationStack {
-                    ParentView()
-                }
-                .tabItem {
-                    Label("Manage", systemImage: "slider.horizontal.3")
-                }
+                NavigationStack { ParentView() }
+                    .tabItem { Label("Manage", systemImage: "slider.horizontal.3") }
+                    .badge(store.approvalQueue.count)
             }
 
-            NavigationStack {
-                ProfileView()
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person.crop.circle")
-            }
+            NavigationStack { ProfileView() }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
+        .tint(.indigo)
     }
 }
 
@@ -52,8 +41,15 @@ struct ProfileView: View {
                 }
             }
 
-            Section("Prototype") {
-                Text("Switch family members here to test both the parent and child experience.")
+            if store.activeMember.role == .child {
+                Section("Your progress") {
+                    LabeledContent("Points earned", value: "\(store.activeMemberPoints)")
+                    LabeledContent("Completed", value: "\(store.activeMemberCompletedChores.count)")
+                }
+            }
+
+            Section("About") {
+                Label("Family chores, without the nagging.", systemImage: "sparkles")
                     .foregroundStyle(.secondary)
             }
         }
