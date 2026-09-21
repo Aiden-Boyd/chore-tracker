@@ -233,6 +233,12 @@ struct SwipeRevealCard<Content: View>: View {
 
     @State private var offset: CGFloat = 0
     @State private var restingOffset: CGFloat = 0
+    @State private var dragDirection: DragDirection?
+
+    private enum DragDirection {
+        case horizontal
+        case vertical
+    }
 
     private let actionWidth: CGFloat = 84
 
@@ -291,10 +297,29 @@ struct SwipeRevealCard<Content: View>: View {
             content()
                 .offset(x: offset)
                 .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 12)
+                .overlay {
+                    if offset != 0 {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                close()
+                            }
+                    }
+                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 18)
                         .onChanged { value in
-                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            let horizontalDistance = abs(value.translation.width)
+                            let verticalDistance = abs(value.translation.height)
+
+                            if dragDirection == nil {
+                                guard max(horizontalDistance, verticalDistance) >= 18 else { return }
+                                dragDirection = horizontalDistance > verticalDistance * 1.35
+                                    ? .horizontal
+                                    : .vertical
+                            }
+
+                            guard dragDirection == .horizontal else { return }
 
                             let proposed = restingOffset + value.translation.width
                             let minOffset = trailingAction == nil ? 0 : -actionWidth
@@ -302,14 +327,27 @@ struct SwipeRevealCard<Content: View>: View {
                             offset = min(max(proposed, minOffset), maxOffset)
                         }
                         .onEnded { value in
-                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            defer { dragDirection = nil }
 
-                            let threshold = actionWidth * 0.42
+                            guard dragDirection == .horizontal else {
+                                if restingOffset == 0 {
+                                    offset = 0
+                                }
+                                return
+                            }
+
+                            let threshold = actionWidth * 0.5
+                            let projectedOffset = restingOffset + value.predictedEndTranslation.width
+
                             withAnimation(.easeOut(duration: 0.18)) {
-                                if offset > threshold, leadingAction != nil {
+                                if offset > threshold,
+                                   projectedOffset > 0,
+                                   leadingAction != nil {
                                     offset = actionWidth
                                     restingOffset = actionWidth
-                                } else if offset < -threshold, trailingAction != nil {
+                                } else if offset < -threshold,
+                                          projectedOffset < 0,
+                                          trailingAction != nil {
                                     offset = -actionWidth
                                     restingOffset = -actionWidth
                                 } else {
