@@ -10,17 +10,20 @@ struct FamilyMember: Identifiable, Codable, Hashable {
     var name: String
     var role: MemberRole
     var isManagedProfile: Bool
+    var archivedAt: Date?
 
     init(
         id: UUID = UUID(),
         name: String,
         role: MemberRole,
-        isManagedProfile: Bool = false
+        isManagedProfile: Bool = false,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
         self.role = role
         self.isManagedProfile = isManagedProfile
+        self.archivedAt = archivedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -28,6 +31,7 @@ struct FamilyMember: Identifiable, Codable, Hashable {
         case name
         case role
         case isManagedProfile
+        case archivedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -36,6 +40,7 @@ struct FamilyMember: Identifiable, Codable, Hashable {
         name = try container.decode(String.self, forKey: .name)
         role = try container.decode(MemberRole.self, forKey: .role)
         isManagedProfile = try container.decodeIfPresent(Bool.self, forKey: .isManagedProfile) ?? false
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 }
 
