@@ -781,7 +781,7 @@ struct HistoryView: View {
 
                         Label("\(choresForDay.count)", systemImage: "checkmark.circle.fill")
                             .font(.subheadline.bold())
-                            .foregroundStyle(choresForDay.isEmpty ? .secondary : .green)
+                            .foregroundStyle(choresForDay.isEmpty ? Color.secondary : Color.green)
                     }
 
                     if choresForDay.isEmpty {
@@ -976,7 +976,7 @@ struct ChoreEditorView: View {
                                         .font(.subheadline.weight(.semibold))
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 9)
-                                        .foregroundStyle(recurrence == option ? .white : .primary)
+                                        .foregroundStyle(recurrence == option ? Color.white : Color.primary)
                                         .background(
                                             recurrence == option ? Color.indigo : Color.secondary.opacity(0.09),
                                             in: Capsule()
@@ -1090,7 +1090,6 @@ struct ChoreEditorView: View {
                 .font(.system(size: 34))
                 .frame(width: 62, height: 62)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 19))
-                .contentTransition(.symbolEffect(.replace))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title.isEmpty ? "Your chore" : title)
@@ -1156,7 +1155,7 @@ struct ChoreEditorView: View {
         Button(action: action) {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(selected ? .white : .primary)
+                .foregroundStyle(selected ? Color.white : Color.primary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
                 .background(selected ? Color.indigo : Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
