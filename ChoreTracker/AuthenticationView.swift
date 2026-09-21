@@ -7,8 +7,8 @@ struct AuthenticationView: View {
         NavigationStack {
             Group {
                 switch auth.stage {
-                case .phone:
-                    PhoneNumberView()
+                case .email:
+                    EmailAddressView()
                 case .code:
                     VerificationCodeView()
                 case .profile:
@@ -17,12 +17,11 @@ struct AuthenticationView: View {
                     EmptyView()
                 }
             }
-            .animation(.default, value: auth.stage)
         }
     }
 }
 
-struct PhoneNumberView: View {
+struct EmailAddressView: View {
     @EnvironmentObject private var auth: AuthStore
     @FocusState private var focused: Bool
 
@@ -34,26 +33,23 @@ struct PhoneNumberView: View {
                 Text("Welcome")
                     .font(.system(size: 38, weight: .bold, design: .rounded))
 
-                Text("Create your account with your phone number.")
+                Text("Create your account with your email.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Phone number")
+                Text("Email")
                     .font(.headline)
 
-                HStack {
-                    Text("+1")
-                        .foregroundStyle(.secondary)
-
-                    TextField("(555) 555-1234", text: $auth.phoneNumber)
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
-                        .focused($focused)
-                }
-                .padding()
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+                TextField("you@example.com", text: $auth.email)
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focused)
+                    .padding()
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
             }
 
             if let error = auth.errorMessage {
@@ -70,7 +66,7 @@ struct PhoneNumberView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     } else {
-                        Text("Continue")
+                        Text("Email me a code")
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
                     }
@@ -80,7 +76,7 @@ struct PhoneNumberView: View {
             .controlSize(.large)
             .disabled(!auth.canSendCode || auth.isLoading)
 
-            Text("We’ll text you a verification code. Message and data rates may apply.")
+            Text("We’ll send a one-time 6-digit sign-in code. No password needed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -101,10 +97,10 @@ struct VerificationCodeView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Check your texts")
+                Text("Check your email")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
 
-                Text("Enter the 6-digit code sent to \(auth.normalizedPhoneNumber).")
+                Text("Enter the 6-digit code sent to \(auth.normalizedEmail).")
                     .foregroundStyle(.secondary)
             }
 
@@ -148,19 +144,12 @@ struct VerificationCodeView: View {
             .controlSize(.large)
             .disabled(!auth.canVerifyCode || auth.isLoading)
 
-            Button("Use a different phone number") {
+            Button("Use a different email") {
                 auth.verificationCode = ""
                 auth.errorMessage = nil
-                auth.stage = .phone
+                auth.stage = .email
             }
             .frame(maxWidth: .infinity)
-
-            #if DEBUG
-            Text("Development code: 123456")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-            #endif
 
             Spacer()
             Spacer()
