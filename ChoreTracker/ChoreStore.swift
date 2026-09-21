@@ -97,14 +97,14 @@ final class ChoreStore: ObservableObject {
     }
 
     var completedChores: [Chore] {
-        chores.filter { $0.status == .completed }.reversed()
+        Array(chores.filter { $0.status == .completed }.reversed())
     }
 
     var activeMemberCompletedChores: [Chore] {
         chores.filter {
             $0.status == .completed &&
             ($0.assignedTo == activeMemberID || $0.claimedBy == activeMemberID)
-        }.reversed()
+        }.reversed())
     }
 
     var activeMemberPoints: Int {
