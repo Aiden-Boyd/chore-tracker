@@ -9,11 +9,33 @@ struct FamilyMember: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
     var role: MemberRole
+    var isManagedProfile: Bool
 
-    init(id: UUID = UUID(), name: String, role: MemberRole) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        role: MemberRole,
+        isManagedProfile: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.role = role
+        self.isManagedProfile = isManagedProfile
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case role
+        case isManagedProfile
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        role = try container.decode(MemberRole.self, forKey: .role)
+        isManagedProfile = try container.decodeIfPresent(Bool.self, forKey: .isManagedProfile) ?? false
     }
 }
 
