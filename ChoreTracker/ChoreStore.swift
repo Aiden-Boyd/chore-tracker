@@ -32,7 +32,6 @@ final class ChoreStore: ObservableObject {
 
         members = [mom, aiden, sibling]
         activeMemberID = aiden.id
-
         chores = [
             Chore(
                 title: "Unload dishwasher",
@@ -49,6 +48,7 @@ final class ChoreStore: ObservableObject {
                 detail: "Kitchen and upstairs trash.",
                 kind: .assigned,
                 recurrence: .weekly,
+                dueDate: Calendar.current.date(byAdding: .day, value: 1, to: .now),
                 assignedTo: sibling.id,
                 requiresApproval: true,
                 points: 10
@@ -81,18 +81,41 @@ final class ChoreStore: ObservableObject {
     }
 
     var myOpenChores: [Chore] {
-        chores.filter {
-            $0.assignedTo == activeMemberID &&
-            $0.status != .completed
-        }
+        chores
+            .filter { $0.assignedTo == activeMemberID && $0.status != .completed }
+            .sorted(by: choreSort)
     }
 
     var claimableChores: [Chore] {
-        chores.filter { $0.kind == .claimable && $0.status == .open }
+        chores
+            .filter { $0.kind == .claimable && $0.status == .open }
+            .sorted(by: choreSort)
     }
 
     var approvalQueue: [Chore] {
         chores.filter { $0.status == .awaitingApproval }
+    }
+
+    var completedChores: [Chore] {
+        chores.filter { $0.status == .completed }.reversed()
+    }
+
+    var activeMemberCompletedChores: [Chore] {
+        chores.filter {
+            $0.status == .completed &&
+            ($0.assignedTo == activeMemberID || $0.claimedBy == activeMemberID)
+        }.reversed()
+    }
+
+    var activeMemberPoints: Int {
+        activeMemberCompletedChores.reduce(0) { $0 + $1.points }
+    }
+
+    var overdueCount: Int {
+        chores.filter { chore in
+            guard chore.status != .completed, let due = chore.dueDate else { return false }
+            return due < .now && !Calendar.current.isDateInToday(due)
+        }.count
     }
 
     func memberName(_ id: UUID?) -> String {
@@ -140,15 +163,17 @@ final class ChoreStore: ObservableObject {
         detail: String,
         kind: ChoreKind,
         recurrence: Recurrence,
+        dueDate: Date?,
         assignee: UUID?,
         requiresApproval: Bool,
         points: Int
     ) {
         let chore = Chore(
-            title: title,
-            detail: detail,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
             kind: kind,
             recurrence: recurrence,
+            dueDate: dueDate,
             assignedTo: kind == .assigned ? assignee : nil,
             requiresApproval: requiresApproval,
             points: points
@@ -156,16 +181,35 @@ final class ChoreStore: ObservableObject {
         chores.insert(chore, at: 0)
     }
 
-    func resetDemoData() {
-        UserDefaults.standard.removeObject(forKey: Self.storageKey)
+    func updateChore(
+        _ chore: Chore,
+        title: String,
+        detail: String,
+        kind: ChoreKind,
+        recurrence: Recurrence,
+        dueDate: Date?,
+        assignee: UUID?,
+        requiresApproval: Bool,
+        points: Int
+    ) {
+        guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
+        chores[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        chores[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        chores[index].kind = kind
+        chores[index].recurrence = recurrence
+        chores[index].dueDate = dueDate
+        chores[index].assignedTo = kind == .assigned ? assignee : nil
+        chores[index].claimedBy = kind == .claimable ? nil : chores[index].claimedBy
+        chores[index].requiresApproval = requiresApproval
+        chores[index].points = points
+    }
+
+    func delete(_ chore: Chore) {
+        chores.removeAll { $0.id == chore.id }
     }
 
     private func save() {
-        let snapshot = Snapshot(
-            members: members,
-            chores: chores,
-            activeMemberID: activeMemberID
-        )
+        let snapshot = Snapshot(members: members, chores: chores, activeMemberID: activeMemberID)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         UserDefaults.standard.set(data, forKey: Self.storageKey)
     }
@@ -173,8 +217,7 @@ final class ChoreStore: ObservableObject {
     private func createNextOccurrenceIfNeeded(from chore: Chore) {
         guard chore.recurrence != .once else { return }
 
-        var next = chore
-        next = Chore(
+        let next = Chore(
             title: chore.title,
             detail: chore.detail,
             kind: chore.kind,
@@ -207,6 +250,15 @@ final class ChoreStore: ObservableObject {
                 candidate = calendar.date(byAdding: .day, value: 1, to: candidate) ?? candidate
             }
             return candidate
+        }
+    }
+
+    private func choreSort(_ lhs: Chore, _ rhs: Chore) -> Bool {
+        switch (lhs.dueDate, rhs.dueDate) {
+        case let (l?, r?): return l < r
+        case (_?, nil): return true
+        case (nil, _?): return false
+        default: return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
         }
     }
 }
