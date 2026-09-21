@@ -8,16 +8,12 @@ struct ContentView: View {
             NavigationStack { HomeView() }
                 .tabItem { Label("Home", systemImage: "house.fill") }
 
-            NavigationStack { ClaimableView() }
-                .tabItem { Label("Claim", systemImage: "hand.raised.fill") }
+            if store.activeMember.role == .child {
+                NavigationStack { ClaimableView() }
+                    .tabItem { Label("Claim", systemImage: "hand.raised.fill") }
 
-            NavigationStack { ActivityView() }
-                .tabItem { Label("Activity", systemImage: "clock.arrow.circlepath") }
-
-            if store.activeMember.role == .parent {
-                NavigationStack { ParentView() }
-                    .tabItem { Label("Manage", systemImage: "slider.horizontal.3") }
-                    .badge(store.approvalQueue.count)
+                NavigationStack { ActivityView() }
+                    .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             }
 
             NavigationStack { ProfileView() }
@@ -42,17 +38,22 @@ struct ProfileView: View {
             }
 
             if store.activeMember.role == .child {
-                Section("Your progress") {
-                    LabeledContent("Points earned", value: "\(store.activeMemberPoints)")
-                    LabeledContent("Completed", value: "\(store.activeMemberCompletedChores.count)")
+                Section("Money") {
+                    LabeledContent(
+                        "Owed to you",
+                        value: money(store.activeMemberMoneyOwedCents)
+                    )
+                    LabeledContent(
+                        "Completed chores",
+                        value: "\(store.activeMemberCompletedChores.count)"
+                    )
                 }
-            }
-
-            Section("About") {
-                Label("Family chores, without the nagging.", systemImage: "sparkles")
-                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Profile")
+    }
+
+    private func money(_ cents: Int) -> String {
+        (Double(cents) / 100).formatted(.currency(code: "USD"))
     }
 }
