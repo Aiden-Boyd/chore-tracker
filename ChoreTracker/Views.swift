@@ -98,14 +98,8 @@ struct HomeView: View {
                     subtitle: "Tap + to add a chore."
                 )
             } else {
-                ForEach(store.activeChores) { chore in
-                    NavigationLink {
-                        EditChoreView(chore: chore)
-                    } label: {
-                        ParentChoreRow(chore: chore)
-                    }
-                    .buttonStyle(SoftPressStyle())
-                }
+                parentChoreSection(title: "Today", chores: parentTodayChores)
+                parentChoreSection(title: "Upcoming", chores: parentUpcomingChores)
             }
         }
     }
@@ -137,8 +131,80 @@ struct HomeView: View {
                     subtitle: "Check Claim if you want to grab something extra."
                 )
             } else {
-                ForEach(store.myOpenChores) { chore in
-                    ChoreCard(chore: chore)
+                childChoreSection(title: "Today", chores: childTodayChores)
+                childChoreSection(title: "Upcoming", chores: childUpcomingChores)
+            }
+        }
+    }
+
+    private var parentTodayChores: [Chore] {
+        store.activeChores.filter(isTodayChore)
+    }
+
+    private var parentUpcomingChores: [Chore] {
+        store.activeChores.filter { !isTodayChore($0) }
+    }
+
+    private var childTodayChores: [Chore] {
+        store.myOpenChores.filter(isTodayChore)
+    }
+
+    private var childUpcomingChores: [Chore] {
+        store.myOpenChores.filter { !isTodayChore($0) }
+    }
+
+    private func isTodayChore(_ chore: Chore) -> Bool {
+        guard let dueDate = chore.dueDate else { return true }
+        return Calendar.current.isDateInToday(dueDate) || dueDate < Calendar.current.startOfDay(for: .now)
+    }
+
+    @ViewBuilder
+    private func parentChoreSection(title: String, chores: [Chore]) -> some View {
+        if !chores.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                ForEach(chores) { chore in
+                    SwipeRevealCard(
+                        trailingTitle: "Delete",
+                        trailingIcon: "trash.fill",
+                        trailingTint: .red
+                    ) {
+                        store.delete(chore)
+                    } content: {
+                        NavigationLink {
+                            EditChoreView(chore: chore)
+                        } label: {
+                            ParentChoreRow(chore: chore)
+                        }
+                        .buttonStyle(SoftPressStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func childChoreSection(title: String, chores: [Chore]) -> some View {
+        if !chores.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                ForEach(chores) { chore in
+                    SwipeRevealCard(
+                        leadingTitle: "Done",
+                        leadingIcon: "checkmark.circle.fill",
+                        leadingTint: .green,
+                        leadingAction: {
+                            store.complete(chore)
+                        }
+                    ) {
+                        ChoreCard(chore: chore)
+                    }
                 }
             }
         }
@@ -149,6 +215,139 @@ struct HomeView: View {
         if count == 0 { return "Nothing assigned right now." }
         if count == 1 { return "One thing to knock out." }
         return "\(count) things to knock out."
+    }
+}
+
+struct SwipeRevealCard<Content: View>: View {
+    var leadingTitle: String? = nil
+    var leadingIcon: String? = nil
+    var leadingTint: Color = .green
+    var leadingAction: (() -> Void)? = nil
+
+    var trailingTitle: String? = nil
+    var trailingIcon: String? = nil
+    var trailingTint: Color = .red
+    var trailingAction: (() -> Void)? = nil
+
+    @ViewBuilder let content: () -> Content
+
+    @State private var offset: CGFloat = 0
+    @State private var restingOffset: CGFloat = 0
+
+    private let actionWidth: CGFloat = 84
+
+    init(
+        leadingTitle: String? = nil,
+        leadingIcon: String? = nil,
+        leadingTint: Color = .green,
+        leadingAction: (() -> Void)? = nil,
+        trailingTitle: String? = nil,
+        trailingIcon: String? = nil,
+        trailingTint: Color = .red,
+        trailingAction: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.leadingTitle = leadingTitle
+        self.leadingIcon = leadingIcon
+        self.leadingTint = leadingTint
+        self.leadingAction = leadingAction
+        self.trailingTitle = trailingTitle
+        self.trailingIcon = trailingIcon
+        self.trailingTint = trailingTint
+        self.trailingAction = trailingAction
+        self.content = content
+    }
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 0) {
+                if let leadingAction {
+                    swipeButton(
+                        title: leadingTitle ?? "Action",
+                        icon: leadingIcon ?? "checkmark",
+                        tint: leadingTint
+                    ) {
+                        leadingAction()
+                        close()
+                    }
+                    .frame(width: actionWidth)
+                }
+
+                Spacer(minLength: 0)
+
+                if let trailingAction {
+                    swipeButton(
+                        title: trailingTitle ?? "Action",
+                        icon: trailingIcon ?? "trash",
+                        tint: trailingTint
+                    ) {
+                        trailingAction()
+                        close()
+                    }
+                    .frame(width: actionWidth)
+                }
+            }
+
+            content()
+                .offset(x: offset)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+                            let proposed = restingOffset + value.translation.width
+                            let minOffset = trailingAction == nil ? 0 : -actionWidth
+                            let maxOffset = leadingAction == nil ? 0 : actionWidth
+                            offset = min(max(proposed, minOffset), maxOffset)
+                        }
+                        .onEnded { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+                            let threshold = actionWidth * 0.42
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                if offset > threshold, leadingAction != nil {
+                                    offset = actionWidth
+                                    restingOffset = actionWidth
+                                } else if offset < -threshold, trailingAction != nil {
+                                    offset = -actionWidth
+                                    restingOffset = -actionWidth
+                                } else {
+                                    offset = 0
+                                    restingOffset = 0
+                                }
+                            }
+                        }
+                )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func swipeButton(
+        title: String,
+        icon: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.title3.bold())
+                Text(title)
+                    .font(.caption.bold())
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(tint)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func close() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            offset = 0
+            restingOffset = 0
+        }
     }
 }
 
