@@ -1,17 +1,30 @@
-# Auth backend
+# New Life Media Auth
 
-Small Node API for Chore Tracker email OTP authentication.
+This backend now uses Better Auth for Chore Tracker authentication and is structured to become the shared identity service for New Life Media apps.
 
-## What it does
+## Current authentication flow
 
-- Generates 6-digit one-time codes
-- Sends them through Resend
-- Codes expire after 10 minutes
-- Limits code requests and verification attempts
-- Stores only a keyed hash of the OTP
-- Returns a signed 30-day auth token after successful verification
+- Email OTP through Better Auth's Email OTP plugin
+- Resend delivers the 6-digit code
+- Better Auth stores users, sessions, OTP verification records, expiry, and attempt state
+- Better Auth's Bearer plugin returns a session token for the native iOS app
+- iOS stores that session token in Keychain
+- Unknown email addresses are automatically registered when their OTP is successfully verified
 
-## Setup
+The Better Auth HTTP routes are mounted at:
+
+```
+/api/auth/*
+```
+
+The iOS app uses:
+
+```
+POST /api/auth/email-otp/send-verification-otp
+POST /api/auth/sign-in/email-otp
+```
+
+## Local setup
 
 ```bash
 cd backend
@@ -19,26 +32,60 @@ cp .env.example .env
 npm install
 ```
 
-Set:
-
-- `RESEND_API_KEY`: your Resend API key
-- `RESEND_FROM`: a sender on a domain you verified in Resend
-- `JWT_SECRET`: a long random secret
-- `PORT`: defaults to 3000
-
-Then:
+Generate a Better Auth secret:
 
 ```bash
-set -a
-source .env
-set +a
+openssl rand -base64 32
+```
+
+Put it in `.env` as `BETTER_AUTH_SECRET`.
+
+For local development you can leave `DATABASE_URL` blank. The server will use `auth.sqlite`.
+
+Create/update the Better Auth schema:
+
+```bash
+npm run migrate
+```
+
+Then run:
+
+```bash
 npm start
 ```
 
-For local iOS Simulator development the app points to `http://127.0.0.1:3000`.
+Check it:
 
-Before production, change `AuthConfiguration.apiBaseURL` in the iOS app to your HTTPS VPS API domain.
+```bash
+curl http://127.0.0.1:3000/health
+```
 
-## Production note
+The response should identify the auth implementation as Better Auth.
 
-The current OTP store is in memory, which is appropriate for one small VPS process. Move OTPs/rate limits to Redis or Postgres before running multiple API instances.
+## PostgreSQL / production
+
+Set:
+
+```env
+BETTER_AUTH_URL=https://auth.newlifemedia.co
+DATABASE_URL=postgres://...
+DATABASE_SSL=true
+```
+
+Then run `npm run migrate` against that database before starting the production service.
+
+Better Auth supports PostgreSQL directly, so the same auth configuration can move from local SQLite to production Postgres without changing the iOS API contract.
+
+## Resend
+
+Set a verified sender, for example:
+
+```env
+RESEND_FROM="New Life Media <accounts@newlifemedia.co>"
+```
+
+Never place the Resend API key, Better Auth secret, or database credentials in the iOS app or Git repository.
+
+## Migration note
+
+The old custom JWT authentication has been removed. Existing development sessions from that implementation are intentionally not treated as Better Auth sessions. Sign in again after migrating.
