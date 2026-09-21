@@ -98,7 +98,7 @@ struct ProfileView: View {
         List {
             Section("Viewing as") {
                 Picker("Family member", selection: $store.activeMemberID) {
-                    ForEach(store.members) { member in
+                    ForEach(store.members.filter { $0.archivedAt == nil }) { member in
                         Text("\(member.name) · \(member.role.rawValue.capitalized)")
                             .tag(member.id)
                     }
@@ -146,6 +146,20 @@ struct ProfileView: View {
                             Label("Archived children", systemImage: "archivebox")
                         }
                     }
+                }
+            }
+
+            Section("Data") {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Available offline")
+                        Text("Your current household data is stored on this device.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "externaldrive.fill.badge.checkmark")
+                        .foregroundStyle(.green)
                 }
             }
 
