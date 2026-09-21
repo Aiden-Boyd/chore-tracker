@@ -57,11 +57,13 @@ struct Chore: Identifiable, Codable, Hashable {
     var kind: ChoreKind
     var recurrence: Recurrence
     var dueDate: Date?
+    var availableFrom: Date?
     var assignedTo: UUID?
     var claimedBy: UUID?
     var status: ChoreStatus
     var requiresApproval: Bool
     var rewardCents: Int
+    var completedAt: Date?
     var paidAt: Date?
 
     init(
@@ -72,11 +74,13 @@ struct Chore: Identifiable, Codable, Hashable {
         kind: ChoreKind,
         recurrence: Recurrence = .once,
         dueDate: Date? = nil,
+        availableFrom: Date? = nil,
         assignedTo: UUID? = nil,
         claimedBy: UUID? = nil,
         status: ChoreStatus = .open,
         requiresApproval: Bool = true,
         rewardCents: Int = 0,
+        completedAt: Date? = nil,
         paidAt: Date? = nil
     ) {
         self.id = id
@@ -86,11 +90,13 @@ struct Chore: Identifiable, Codable, Hashable {
         self.kind = kind
         self.recurrence = recurrence
         self.dueDate = dueDate
+        self.availableFrom = availableFrom
         self.assignedTo = assignedTo
         self.claimedBy = claimedBy
         self.status = status
         self.requiresApproval = requiresApproval
         self.rewardCents = rewardCents
+        self.completedAt = completedAt
         self.paidAt = paidAt
     }
 
