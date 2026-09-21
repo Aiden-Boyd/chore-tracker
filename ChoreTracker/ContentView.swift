@@ -82,6 +82,7 @@ struct UndoBar: View {
 struct ProfileView: View {
     @EnvironmentObject private var store: ChoreStore
     @EnvironmentObject private var auth: AuthStore
+    @State private var showingAddChild = false
 
     var body: some View {
         List {
@@ -90,6 +91,40 @@ struct ProfileView: View {
                     ForEach(store.members) { member in
                         Text("\(member.name) · \(member.role.rawValue.capitalized)")
                             .tag(member.id)
+                    }
+                }
+            }
+
+            if store.activeMember.role == .parent {
+                Section("Household") {
+                    ForEach(store.children) { child in
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(.indigo.opacity(0.12))
+                                .frame(width: 38, height: 38)
+                                .overlay(
+                                    Text(String(child.name.prefix(1)).uppercased())
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.indigo)
+                                )
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(child.name)
+                                    .font(.body.weight(.medium))
+
+                                Text(child.isManagedProfile ? "Managed child · no phone needed" : "Child account")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+                        }
+                    }
+
+                    Button {
+                        showingAddChild = true
+                    } label: {
+                        Label("Add child", systemImage: "person.badge.plus")
                     }
                 }
             }
@@ -115,9 +150,87 @@ struct ProfileView: View {
             }
         }
         .navigationTitle("Profile")
+        .sheet(isPresented: $showingAddChild) {
+            NavigationStack {
+                AddManagedChildView()
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private func money(_ cents: Int) -> String {
         (Double(cents) / 100).formatted(.currency(code: "USD"))
+    }
+}
+
+
+struct AddManagedChildView: View {
+    @EnvironmentObject private var store: ChoreStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            VStack(spacing: 10) {
+                Image(systemName: "figure.child.circle.fill")
+                    .font(.system(size: 52))
+                    .foregroundStyle(.indigo)
+
+                Text("Add a child")
+                    .font(.title2.bold())
+
+                Text("They don’t need a phone, email, or account. You can assign chores and track rewards for them from your household.")
+                    .multilineTextAlignment(.center)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField("Child’s name", text: $name)
+                .textInputAutocapitalization(.words)
+                .textContentType(.name)
+                .focused($focused)
+                .submitLabel(.done)
+                .onSubmit {
+                    if canSave { save() }
+                }
+                .padding(14)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+
+            Button {
+                save()
+            } label: {
+                Text("Add Child")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(canSave ? Color.indigo : Color.secondary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(SoftPressStyle())
+            .disabled(!canSave)
+
+            Spacer()
+        }
+        .padding(24)
+        .navigationTitle("New Child")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
+        .onAppear { focused = true }
+    }
+
+    private func save() {
+        store.addManagedChild(name: name)
+        dismiss()
     }
 }
