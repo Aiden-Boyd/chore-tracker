@@ -3,28 +3,29 @@ import Foundation
 @MainActor
 final class AuthStore: ObservableObject {
     enum Stage {
-        case phone
+        case email
         case code
         case profile
         case signedIn
     }
 
-    @Published var stage: Stage = .phone
-    @Published var phoneNumber = ""
+    @Published var stage: Stage = .email
+    @Published var email = ""
     @Published var verificationCode = ""
     @Published var name = ""
     @Published var role: MemberRole = .parent
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let sessionKey = "chore-tracker.auth-session.v1"
-    private let phoneKey = "chore-tracker.auth-phone.v1"
+    private let sessionKey = "chore-tracker.auth-session.v2"
+    private let emailKey = "chore-tracker.auth-email.v1"
     private let nameKey = "chore-tracker.auth-name.v1"
     private let roleKey = "chore-tracker.auth-role.v1"
 
     init() {
-        if UserDefaults.standard.bool(forKey: sessionKey) {
-            phoneNumber = UserDefaults.standard.string(forKey: phoneKey) ?? ""
+        if UserDefaults.standard.bool(forKey: sessionKey),
+           KeychainStore.shared.read("auth-token") != nil {
+            email = UserDefaults.standard.string(forKey: emailKey) ?? ""
             name = UserDefaults.standard.string(forKey: nameKey) ?? ""
             if let savedRole = UserDefaults.standard.string(forKey: roleKey),
                let role = MemberRole(rawValue: savedRole) {
@@ -34,23 +35,14 @@ final class AuthStore: ObservableObject {
         }
     }
 
-    var normalizedPhoneNumber: String {
-        let digits = phoneNumber.filter(\.isNumber)
-
-        if digits.count == 10 {
-            return "+1" + digits
-        }
-
-        if digits.count == 11 && digits.first == "1" {
-            return "+" + digits
-        }
-
-        return phoneNumber.hasPrefix("+") ? phoneNumber : "+" + digits
+    var normalizedEmail: String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     var canSendCode: Bool {
-        let digits = phoneNumber.filter(\.isNumber)
-        return digits.count >= 10
+        let value = normalizedEmail
+        let parts = value.split(separator: "@")
+        return parts.count == 2 && parts[0].count > 0 && parts[1].contains(".")
     }
 
     var canVerifyCode: Bool {
@@ -59,7 +51,7 @@ final class AuthStore: ObservableObject {
 
     func sendCode() async {
         guard canSendCode else {
-            errorMessage = "Enter a valid phone number."
+            errorMessage = "Enter a valid email address."
             return
         }
 
@@ -67,7 +59,7 @@ final class AuthStore: ObservableObject {
         errorMessage = nil
 
         do {
-            try await PhoneAuthService.shared.requestCode(for: normalizedPhoneNumber)
+            try await EmailAuthService.shared.requestCode(for: normalizedEmail)
             stage = .code
         } catch {
             errorMessage = error.localizedDescription
@@ -86,10 +78,11 @@ final class AuthStore: ObservableObject {
         errorMessage = nil
 
         do {
-            try await PhoneAuthService.shared.verify(
-                phoneNumber: normalizedPhoneNumber,
+            let token = try await EmailAuthService.shared.verify(
+                email: normalizedEmail,
                 code: verificationCode.filter(\.isNumber)
             )
+            try KeychainStore.shared.save(token, for: "auth-token")
             stage = .profile
         } catch {
             errorMessage = error.localizedDescription
@@ -106,7 +99,7 @@ final class AuthStore: ObservableObject {
         }
 
         UserDefaults.standard.set(true, forKey: sessionKey)
-        UserDefaults.standard.set(normalizedPhoneNumber, forKey: phoneKey)
+        UserDefaults.standard.set(normalizedEmail, forKey: emailKey)
         UserDefaults.standard.set(trimmedName, forKey: nameKey)
         UserDefaults.standard.set(role.rawValue, forKey: roleKey)
         stage = .signedIn
@@ -114,15 +107,16 @@ final class AuthStore: ObservableObject {
 
     func signOut() {
         UserDefaults.standard.removeObject(forKey: sessionKey)
-        UserDefaults.standard.removeObject(forKey: phoneKey)
+        UserDefaults.standard.removeObject(forKey: emailKey)
         UserDefaults.standard.removeObject(forKey: nameKey)
         UserDefaults.standard.removeObject(forKey: roleKey)
+        KeychainStore.shared.delete("auth-token")
 
-        phoneNumber = ""
+        email = ""
         verificationCode = ""
         name = ""
         role = .parent
         errorMessage = nil
-        stage = .phone
+        stage = .email
     }
 }
