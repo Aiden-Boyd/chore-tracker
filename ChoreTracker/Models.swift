@@ -51,6 +51,7 @@ enum Recurrence: String, Codable, CaseIterable, Identifiable {
 
 struct Chore: Identifiable, Codable, Hashable {
     let id: UUID
+    var emoji: String
     var title: String
     var detail: String
     var kind: ChoreKind
@@ -60,10 +61,12 @@ struct Chore: Identifiable, Codable, Hashable {
     var claimedBy: UUID?
     var status: ChoreStatus
     var requiresApproval: Bool
-    var points: Int
+    var rewardCents: Int
+    var paidAt: Date?
 
     init(
         id: UUID = UUID(),
+        emoji: String = "✨",
         title: String,
         detail: String = "",
         kind: ChoreKind,
@@ -73,9 +76,11 @@ struct Chore: Identifiable, Codable, Hashable {
         claimedBy: UUID? = nil,
         status: ChoreStatus = .open,
         requiresApproval: Bool = true,
-        points: Int = 0
+        rewardCents: Int = 0,
+        paidAt: Date? = nil
     ) {
         self.id = id
+        self.emoji = emoji
         self.title = title
         self.detail = detail
         self.kind = kind
@@ -85,6 +90,11 @@ struct Chore: Identifiable, Codable, Hashable {
         self.claimedBy = claimedBy
         self.status = status
         self.requiresApproval = requiresApproval
-        self.points = points
+        self.rewardCents = rewardCents
+        self.paidAt = paidAt
+    }
+
+    var rewardAmount: Double {
+        Double(rewardCents) / 100
     }
 }
