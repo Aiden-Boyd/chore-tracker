@@ -17,14 +17,14 @@ final class AuthStore: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let sessionKey = "chore-tracker.auth-session.v2"
+    private let sessionKey = "chore-tracker.auth-session.v3"
     private let emailKey = "chore-tracker.auth-email.v1"
     private let nameKey = "chore-tracker.auth-name.v1"
     private let roleKey = "chore-tracker.auth-role.v1"
 
     init() {
         if UserDefaults.standard.bool(forKey: sessionKey),
-           KeychainStore.shared.read("auth-token") != nil {
+           KeychainStore.shared.read("better-auth-token") != nil {
             email = UserDefaults.standard.string(forKey: emailKey) ?? ""
             name = UserDefaults.standard.string(forKey: nameKey) ?? ""
             if let savedRole = UserDefaults.standard.string(forKey: roleKey),
@@ -82,7 +82,7 @@ final class AuthStore: ObservableObject {
                 email: normalizedEmail,
                 code: verificationCode.filter(\.isNumber)
             )
-            try KeychainStore.shared.save(token, for: "auth-token")
+            try KeychainStore.shared.save(token, for: "better-auth-token")
             stage = .profile
         } catch {
             errorMessage = friendlyMessage(for: error)
@@ -127,6 +127,7 @@ final class AuthStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: emailKey)
         UserDefaults.standard.removeObject(forKey: nameKey)
         UserDefaults.standard.removeObject(forKey: roleKey)
+        KeychainStore.shared.delete("better-auth-token")
         KeychainStore.shared.delete("auth-token")
 
         email = ""
