@@ -33,7 +33,7 @@ final class ChoreStore: ObservableObject {
 
         let mom = FamilyMember(name: "Mom", role: .parent)
         let aiden = FamilyMember(name: "Aiden", role: .child)
-        let sibling = FamilyMember(name: "Sam", role: .child)
+        let sibling = FamilyMember(name: "Sam", role: .child, isManagedProfile: true)
 
         members = [mom, aiden, sibling]
         activeMemberID = mom.id
@@ -167,6 +167,42 @@ final class ChoreStore: ObservableObject {
     func memberName(_ id: UUID?) -> String {
         guard let id else { return "Anyone" }
         return members.first(where: { $0.id == id })?.name ?? "Unknown"
+    }
+
+    func addManagedChild(name: String) {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else { return }
+
+        members.append(
+            FamilyMember(
+                name: cleanName,
+                role: .child,
+                isManagedProfile: true
+            )
+        )
+    }
+
+    func renameMember(_ memberID: UUID, name: String) {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty,
+              let index = members.firstIndex(where: { $0.id == memberID }) else { return }
+
+        members[index].name = cleanName
+    }
+
+    func removeManagedChild(_ memberID: UUID) {
+        guard let member = members.first(where: { $0.id == memberID }),
+              member.role == .child,
+              member.isManagedProfile else { return }
+
+        chores.removeAll {
+            $0.assignedTo == memberID || $0.claimedBy == memberID
+        }
+        members.removeAll { $0.id == memberID }
+
+        if activeMemberID == memberID, let parent = members.first(where: { $0.role == .parent }) {
+            activeMemberID = parent.id
+        }
     }
 
     func claim(_ chore: Chore) {
