@@ -3,9 +3,9 @@ import SwiftUI
 struct SoftPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.82 : 1)
-            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .opacity(configuration.isPressed ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -460,108 +460,96 @@ struct ChoreCard: View {
     let chore: Chore
 
     @State private var feedbackTrigger = 0
-    @State private var completing = false
+    @State private var showConfirmation = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(completing ? Color.green.opacity(0.14) : Color.secondary.opacity(0.1))
+        ZStack {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(chore.emoji)
+                        .font(.system(size: 31))
                         .frame(width: 54, height: 54)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
 
-                    if completing {
-                        Image(systemName: "checkmark")
-                            .font(.title2.bold())
-                            .foregroundStyle(.green)
-                            .transition(.scale.combined(with: .opacity))
-                    } else {
-                        Text(chore.emoji)
-                            .font(.system(size: 31))
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .animation(.bouncy(duration: 0.4), value: completing)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(chore.title)
+                            .font(.headline)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(chore.title)
-                        .font(.headline)
-
-                    if !chore.detail.isEmpty {
-                        Text(chore.detail)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-
-                Spacer()
-
-                if chore.rewardCents > 0 {
-                    Text(money(chore.rewardCents))
-                        .font(.subheadline.bold())
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .background(.green.opacity(0.1), in: Capsule())
-                }
-            }
-
-            HStack(spacing: 8) {
-                if chore.recurrence != .once {
-                    InfoChip(icon: "repeat", text: chore.recurrence.label)
-                }
-
-                if let dueDate = chore.dueDate {
-                    DueChip(date: dueDate)
-                }
-
-                if chore.status == .awaitingApproval {
-                    InfoChip(icon: "clock.fill", text: "Waiting")
-                }
-            }
-
-            if chore.assignedTo == store.activeMemberID && chore.status != .awaitingApproval {
-                Button {
-                    guard !completing else { return }
-                    completing = true
-                    feedbackTrigger += 1
-
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(380))
-                        store.complete(chore)
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-
-                        if completing {
-                            Image(systemName: "checkmark.circle.fill")
-                                .symbolEffect(.bounce, value: completing)
-                            Text("Nice!")
-                        } else {
-                            Image(systemName: "checkmark.circle.fill")
-                            Text("Done")
+                        if !chore.detail.isEmpty {
+                            Text(chore.detail)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
-
-                        Spacer()
                     }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.vertical, 12)
-                    .background(completing ? Color.green : Color.indigo, in: RoundedRectangle(cornerRadius: 15))
-                    .animation(.snappy, value: completing)
+
+                    Spacer()
+
+                    if chore.rewardCents > 0 {
+                        Text(money(chore.rewardCents))
+                            .font(.subheadline.bold())
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 6)
+                            .background(.green.opacity(0.1), in: Capsule())
+                    }
                 }
-                .buttonStyle(SoftPressStyle())
-                .disabled(completing)
-                .sensoryFeedback(.success, trigger: feedbackTrigger)
+
+                HStack(spacing: 8) {
+                    if chore.recurrence != .once {
+                        InfoChip(icon: "repeat", text: chore.recurrence.label)
+                    }
+
+                    if let dueDate = chore.dueDate {
+                        DueChip(date: dueDate)
+                    }
+
+                    if chore.status == .awaitingApproval {
+                        InfoChip(icon: "clock.fill", text: "Waiting")
+                    }
+                }
+
+                if chore.assignedTo == store.activeMemberID && chore.status != .awaitingApproval {
+                    Button {
+                        feedbackTrigger += 1
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            showConfirmation = true
+                        }
+                        store.complete(chore)
+                    } label: {
+                        Label("Done", systemImage: "checkmark.circle.fill")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.indigo, in: RoundedRectangle(cornerRadius: 15))
+                    }
+                    .buttonStyle(SoftPressStyle())
+                    .sensoryFeedback(.success, trigger: feedbackTrigger)
+                }
+            }
+            .padding(16)
+            .background(.background, in: RoundedRectangle(cornerRadius: 23))
+            .overlay(
+                RoundedRectangle(cornerRadius: 23)
+                    .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+            )
+
+            if showConfirmation {
+                RoundedRectangle(cornerRadius: 23)
+                    .fill(.ultraThinMaterial)
+
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 42))
+                        .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: showConfirmation)
+
+                    Text(chore.requiresApproval ? "Sent for approval" : "Completed")
+                        .font(.headline)
+                }
+                .transition(.opacity)
             }
         }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 23))
-        .overlay(
-            RoundedRectangle(cornerRadius: 23)
-                .stroke(completing ? Color.green.opacity(0.35) : Color.secondary.opacity(0.1), lineWidth: 1)
-        )
     }
 
     private func money(_ cents: Int) -> String {
@@ -673,10 +661,10 @@ struct ClaimableView: View {
                                 guard claimingID == nil else { return }
                                 claimingID = chore.id
                                 feedbackTrigger += 1
+                                store.claim(chore)
 
                                 Task {
-                                    try? await Task.sleep(for: .milliseconds(260))
-                                    store.claim(chore)
+                                    try? await Task.sleep(for: .milliseconds(180))
                                     claimingID = nil
                                 }
                             } label: {
@@ -1115,10 +1103,10 @@ struct ChoreEditorView: View {
             RoundedRectangle(cornerRadius: 22)
                 .stroke(.indigo.opacity(0.15), lineWidth: 1)
         )
-        .animation(.snappy, value: title)
-        .animation(.snappy, value: kind)
-        .animation(.snappy, value: assignee)
-        .animation(.snappy, value: rewardAmount)
+        .animation(.easeOut(duration: 0.16), value: title)
+        .animation(.easeOut(duration: 0.16), value: kind)
+        .animation(.easeOut(duration: 0.16), value: assignee)
+        .animation(.easeOut(duration: 0.16), value: rewardAmount)
     }
 
     private var assigneeName: String {
