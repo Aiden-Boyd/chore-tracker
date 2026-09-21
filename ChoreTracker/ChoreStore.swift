@@ -5,6 +5,11 @@ final class ChoreStore: ObservableObject {
     @Published var members: [FamilyMember] { didSet { save() } }
     @Published var chores: [Chore] { didSet { save() } }
     @Published var activeMemberID: UUID { didSet { save() } }
+    @Published private(set) var undoMessage: String?
+
+    private var undoSnapshot: [Chore]?
+    private var undoToken: UUID?
+    private var undoTask: Task<Void, Never>?
 
     private static let storageKey = "chore-tracker.snapshot.v3"
 
@@ -170,6 +175,7 @@ final class ChoreStore: ObservableObject {
               chores[index].status == .open,
               isAvailable(chores[index]) else { return }
 
+        recordUndo("Chore claimed")
         chores[index].claimedBy = activeMemberID
         chores[index].assignedTo = activeMemberID
         chores[index].status = .claimed
@@ -178,6 +184,7 @@ final class ChoreStore: ObservableObject {
     func complete(_ chore: Chore) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
 
+        recordUndo(chores[index].requiresApproval ? "Sent for approval" : "Chore completed")
         let completedCopy = chores[index]
         if chores[index].requiresApproval {
             chores[index].status = .awaitingApproval
@@ -191,6 +198,7 @@ final class ChoreStore: ObservableObject {
     func approve(_ chore: Chore) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
 
+        recordUndo("Chore approved")
         let completedCopy = chores[index]
         chores[index].status = .completed
         chores[index].completedAt = .now
@@ -199,10 +207,20 @@ final class ChoreStore: ObservableObject {
 
     func reopen(_ chore: Chore) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
+        recordUndo("Chore sent back")
         chores[index].status = .claimed
     }
 
     func markPaid(to memberID: UUID) {
+        let hasUnpaid = chores.contains {
+            $0.status == .completed &&
+            $0.paidAt == nil &&
+            ($0.assignedTo == memberID || $0.claimedBy == memberID)
+        }
+        guard hasUnpaid else { return }
+
+        recordUndo("Marked paid")
+
         for index in chores.indices where
             chores[index].status == .completed &&
             chores[index].paidAt == nil &&
@@ -222,6 +240,8 @@ final class ChoreStore: ObservableObject {
         requiresApproval: Bool,
         rewardCents: Int
     ) {
+        recordUndo("Chore added")
+
         let chore = Chore(
             emoji: normalizedEmoji(emoji),
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -249,6 +269,7 @@ final class ChoreStore: ObservableObject {
         rewardCents: Int
     ) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
+        recordUndo("Changes saved")
         chores[index].emoji = normalizedEmoji(emoji)
         chores[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         chores[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -262,7 +283,44 @@ final class ChoreStore: ObservableObject {
     }
 
     func delete(_ chore: Chore) {
+        guard chores.contains(where: { $0.id == chore.id }) else { return }
+        recordUndo("Chore deleted")
         chores.removeAll { $0.id == chore.id }
+    }
+
+    func undoLastAction() {
+        guard let snapshot = undoSnapshot else { return }
+
+        undoTask?.cancel()
+        chores = snapshot
+        undoSnapshot = nil
+        undoMessage = nil
+        undoToken = nil
+    }
+
+    func dismissUndo() {
+        undoTask?.cancel()
+        undoSnapshot = nil
+        undoMessage = nil
+        undoToken = nil
+    }
+
+    private func recordUndo(_ message: String) {
+        undoTask?.cancel()
+
+        let token = UUID()
+        undoSnapshot = chores
+        undoMessage = message
+        undoToken = token
+
+        undoTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self, self.undoToken == token else { return }
+
+            self.undoSnapshot = nil
+            self.undoMessage = nil
+            self.undoToken = nil
+        }
     }
 
     private func isAvailable(_ chore: Chore) -> Bool {
