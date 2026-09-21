@@ -6,7 +6,7 @@ final class ChoreStore: ObservableObject {
     @Published var chores: [Chore] { didSet { save() } }
     @Published var activeMemberID: UUID { didSet { save() } }
 
-    private static let storageKey = "chore-tracker.snapshot.v1"
+    private static let storageKey = "chore-tracker.snapshot.v2"
 
     private struct Snapshot: Codable {
         var members: [FamilyMember]
@@ -31,9 +31,10 @@ final class ChoreStore: ObservableObject {
         let sibling = FamilyMember(name: "Sam", role: .child)
 
         members = [mom, aiden, sibling]
-        activeMemberID = aiden.id
+        activeMemberID = mom.id
         chores = [
             Chore(
+                emoji: "🍽️",
                 title: "Unload dishwasher",
                 detail: "Put everything away and clear the rack.",
                 kind: .assigned,
@@ -41,9 +42,10 @@ final class ChoreStore: ObservableObject {
                 dueDate: Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: .now),
                 assignedTo: aiden.id,
                 requiresApproval: false,
-                points: 5
+                rewardCents: 100
             ),
             Chore(
+                emoji: "🗑️",
                 title: "Take trash out",
                 detail: "Kitchen and upstairs trash.",
                 kind: .assigned,
@@ -51,22 +53,24 @@ final class ChoreStore: ObservableObject {
                 dueDate: Calendar.current.date(byAdding: .day, value: 1, to: .now),
                 assignedTo: sibling.id,
                 requiresApproval: true,
-                points: 10
+                rewardCents: 200
             ),
             Chore(
+                emoji: "🧹",
                 title: "Vacuum living room",
                 detail: "Available to anyone.",
                 kind: .claimable,
                 recurrence: .weekly,
                 requiresApproval: true,
-                points: 15
+                rewardCents: 300
             ),
             Chore(
+                emoji: "✨",
                 title: "Wipe kitchen counters",
                 kind: .claimable,
                 recurrence: .daily,
                 requiresApproval: false,
-                points: 5
+                rewardCents: 100
             )
         ]
         save()
@@ -96,6 +100,10 @@ final class ChoreStore: ObservableObject {
         chores.filter { $0.status == .awaitingApproval }
     }
 
+    var activeChores: [Chore] {
+        chores.filter { $0.status != .completed }.sorted(by: choreSort)
+    }
+
     var completedChores: [Chore] {
         Array(chores.filter { $0.status == .completed }.reversed())
     }
@@ -109,15 +117,24 @@ final class ChoreStore: ObservableObject {
         )
     }
 
-    var activeMemberPoints: Int {
-        activeMemberCompletedChores.reduce(0) { $0 + $1.points }
+    var totalMoneyOwedCents: Int {
+        chores
+            .filter { $0.status == .completed && $0.paidAt == nil }
+            .reduce(0) { $0 + $1.rewardCents }
     }
 
-    var overdueCount: Int {
-        chores.filter { chore in
-            guard chore.status != .completed, let due = chore.dueDate else { return false }
-            return due < .now && !Calendar.current.isDateInToday(due)
-        }.count
+    func moneyOwedCents(to memberID: UUID) -> Int {
+        chores
+            .filter {
+                $0.status == .completed &&
+                $0.paidAt == nil &&
+                ($0.assignedTo == memberID || $0.claimedBy == memberID)
+            }
+            .reduce(0) { $0 + $1.rewardCents }
+    }
+
+    var activeMemberMoneyOwedCents: Int {
+        moneyOwedCents(to: activeMemberID)
     }
 
     func memberName(_ id: UUID?) -> String {
@@ -160,7 +177,17 @@ final class ChoreStore: ObservableObject {
         chores[index].status = .claimed
     }
 
+    func markPaid(to memberID: UUID) {
+        for index in chores.indices where
+            chores[index].status == .completed &&
+            chores[index].paidAt == nil &&
+            (chores[index].assignedTo == memberID || chores[index].claimedBy == memberID) {
+            chores[index].paidAt = .now
+        }
+    }
+
     func addChore(
+        emoji: String,
         title: String,
         detail: String,
         kind: ChoreKind,
@@ -168,9 +195,10 @@ final class ChoreStore: ObservableObject {
         dueDate: Date?,
         assignee: UUID?,
         requiresApproval: Bool,
-        points: Int
+        rewardCents: Int
     ) {
         let chore = Chore(
+            emoji: emoji.isEmpty ? "✨" : emoji,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
             kind: kind,
@@ -178,13 +206,14 @@ final class ChoreStore: ObservableObject {
             dueDate: dueDate,
             assignedTo: kind == .assigned ? assignee : nil,
             requiresApproval: requiresApproval,
-            points: points
+            rewardCents: rewardCents
         )
         chores.insert(chore, at: 0)
     }
 
     func updateChore(
         _ chore: Chore,
+        emoji: String,
         title: String,
         detail: String,
         kind: ChoreKind,
@@ -192,9 +221,10 @@ final class ChoreStore: ObservableObject {
         dueDate: Date?,
         assignee: UUID?,
         requiresApproval: Bool,
-        points: Int
+        rewardCents: Int
     ) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
+        chores[index].emoji = emoji.isEmpty ? "✨" : emoji
         chores[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         chores[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         chores[index].kind = kind
@@ -203,7 +233,7 @@ final class ChoreStore: ObservableObject {
         chores[index].assignedTo = kind == .assigned ? assignee : nil
         chores[index].claimedBy = kind == .claimable ? nil : chores[index].claimedBy
         chores[index].requiresApproval = requiresApproval
-        chores[index].points = points
+        chores[index].rewardCents = rewardCents
     }
 
     func delete(_ chore: Chore) {
@@ -220,6 +250,7 @@ final class ChoreStore: ObservableObject {
         guard chore.recurrence != .once else { return }
 
         let next = Chore(
+            emoji: chore.emoji,
             title: chore.title,
             detail: chore.detail,
             kind: chore.kind,
@@ -229,7 +260,7 @@ final class ChoreStore: ObservableObject {
             claimedBy: nil,
             status: .open,
             requiresApproval: chore.requiresApproval,
-            points: chore.points
+            rewardCents: chore.rewardCents
         )
         chores.insert(next, at: 0)
     }
