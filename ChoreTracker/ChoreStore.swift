@@ -6,7 +6,7 @@ final class ChoreStore: ObservableObject {
     @Published var chores: [Chore] { didSet { save() } }
     @Published var activeMemberID: UUID { didSet { save() } }
 
-    private static let storageKey = "chore-tracker.snapshot.v2"
+    private static let storageKey = "chore-tracker.snapshot.v3"
 
     private struct Snapshot: Codable {
         var members: [FamilyMember]
@@ -86,13 +86,21 @@ final class ChoreStore: ObservableObject {
 
     var myOpenChores: [Chore] {
         chores
-            .filter { $0.assignedTo == activeMemberID && $0.status != .completed }
+            .filter {
+                $0.assignedTo == activeMemberID &&
+                $0.status != .completed &&
+                isAvailable($0)
+            }
             .sorted(by: choreSort)
     }
 
     var claimableChores: [Chore] {
         chores
-            .filter { $0.kind == .claimable && $0.status == .open }
+            .filter {
+                $0.kind == .claimable &&
+                $0.status == .open &&
+                isAvailable($0)
+            }
             .sorted(by: choreSort)
     }
 
@@ -101,20 +109,21 @@ final class ChoreStore: ObservableObject {
     }
 
     var activeChores: [Chore] {
-        chores.filter { $0.status != .completed }.sorted(by: choreSort)
+        chores
+            .filter { $0.status != .completed && isAvailable($0) }
+            .sorted(by: choreSort)
     }
 
     var completedChores: [Chore] {
-        Array(chores.filter { $0.status == .completed }.reversed())
+        chores
+            .filter { $0.status == .completed }
+            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
 
     var activeMemberCompletedChores: [Chore] {
-        Array(
-            chores.filter {
-                $0.status == .completed &&
-                ($0.assignedTo == activeMemberID || $0.claimedBy == activeMemberID)
-            }.reversed()
-        )
+        completedChores.filter {
+            $0.assignedTo == activeMemberID || $0.claimedBy == activeMemberID
+        }
     }
 
     var totalMoneyOwedCents: Int {
@@ -137,6 +146,19 @@ final class ChoreStore: ObservableObject {
         moneyOwedCents(to: activeMemberID)
     }
 
+    func completedChores(on date: Date, for memberID: UUID? = nil) -> [Chore] {
+        let calendar = Calendar.current
+        return completedChores.filter { chore in
+            guard let completedAt = chore.completedAt,
+                  calendar.isDate(completedAt, inSameDayAs: date) else { return false }
+
+            if let memberID {
+                return chore.assignedTo == memberID || chore.claimedBy == memberID
+            }
+            return true
+        }
+    }
+
     func memberName(_ id: UUID?) -> String {
         guard let id else { return "Anyone" }
         return members.first(where: { $0.id == id })?.name ?? "Unknown"
@@ -145,7 +167,8 @@ final class ChoreStore: ObservableObject {
     func claim(_ chore: Chore) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }),
               chores[index].kind == .claimable,
-              chores[index].status == .open else { return }
+              chores[index].status == .open,
+              isAvailable(chores[index]) else { return }
 
         chores[index].claimedBy = activeMemberID
         chores[index].assignedTo = activeMemberID
@@ -160,6 +183,7 @@ final class ChoreStore: ObservableObject {
             chores[index].status = .awaitingApproval
         } else {
             chores[index].status = .completed
+            chores[index].completedAt = .now
             createNextOccurrenceIfNeeded(from: completedCopy)
         }
     }
@@ -169,6 +193,7 @@ final class ChoreStore: ObservableObject {
 
         let completedCopy = chores[index]
         chores[index].status = .completed
+        chores[index].completedAt = .now
         createNextOccurrenceIfNeeded(from: completedCopy)
     }
 
@@ -198,7 +223,7 @@ final class ChoreStore: ObservableObject {
         rewardCents: Int
     ) {
         let chore = Chore(
-            emoji: emoji.isEmpty ? "✨" : emoji,
+            emoji: normalizedEmoji(emoji),
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
             kind: kind,
@@ -224,7 +249,7 @@ final class ChoreStore: ObservableObject {
         rewardCents: Int
     ) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
-        chores[index].emoji = emoji.isEmpty ? "✨" : emoji
+        chores[index].emoji = normalizedEmoji(emoji)
         chores[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         chores[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         chores[index].kind = kind
@@ -240,6 +265,16 @@ final class ChoreStore: ObservableObject {
         chores.removeAll { $0.id == chore.id }
     }
 
+    private func isAvailable(_ chore: Chore) -> Bool {
+        guard let availableFrom = chore.availableFrom else { return true }
+        return availableFrom <= .now
+    }
+
+    private func normalizedEmoji(_ raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "✨" : value
+    }
+
     private func save() {
         let snapshot = Snapshot(members: members, chores: chores, activeMemberID: activeMemberID)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
@@ -249,13 +284,19 @@ final class ChoreStore: ObservableObject {
     private func createNextOccurrenceIfNeeded(from chore: Chore) {
         guard chore.recurrence != .once else { return }
 
+        let base = chore.dueDate ?? .now
+        guard let nextDate = nextDueDate(after: base, recurrence: chore.recurrence) else { return }
+
+        let nextAvailable = Calendar.current.startOfDay(for: nextDate)
+
         let next = Chore(
             emoji: chore.emoji,
             title: chore.title,
             detail: chore.detail,
             kind: chore.kind,
             recurrence: chore.recurrence,
-            dueDate: nextDueDate(after: chore.dueDate ?? .now, recurrence: chore.recurrence),
+            dueDate: nextDate,
+            availableFrom: nextAvailable,
             assignedTo: chore.kind == .assigned ? chore.assignedTo : nil,
             claimedBy: nil,
             status: .open,
