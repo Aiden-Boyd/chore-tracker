@@ -39,7 +39,7 @@ struct ProfileView: View {
             }
 
             Section("Account") {
-                LabeledContent("Phone", value: auth.normalizedPhoneNumber)
+                LabeledContent("Email", value: auth.normalizedEmail)
                 Button("Sign Out", role: .destructive) {
                     auth.signOut()
                 }
