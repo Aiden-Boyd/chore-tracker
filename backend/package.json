@@ -1,13 +1,18 @@
 {
-  "name": "chore-tracker-auth",
+  "name": "new-life-media-auth",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "npx auth@latest migrate --config ./auth.js --yes"
   },
   "dependencies": {
+    "better-auth": "^1.6.0",
+    "better-sqlite3": "^12.2.0",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
-    "jose": "^6.1.0",
+    "pg": "^8.16.3",
     "resend": "^6.0.0"
   }
 }
