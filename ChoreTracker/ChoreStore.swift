@@ -2,11 +2,30 @@ import Foundation
 
 @MainActor
 final class ChoreStore: ObservableObject {
-    @Published var members: [FamilyMember]
-    @Published var chores: [Chore]
-    @Published var activeMemberID: UUID
+    @Published var members: [FamilyMember] { didSet { save() } }
+    @Published var chores: [Chore] { didSet { save() } }
+    @Published var activeMemberID: UUID { didSet { save() } }
+
+    private static let storageKey = "chore-tracker.snapshot.v1"
+
+    private struct Snapshot: Codable {
+        var members: [FamilyMember]
+        var chores: [Chore]
+        var activeMemberID: UUID
+    }
 
     init() {
+        if let data = UserDefaults.standard.data(forKey: Self.storageKey),
+           let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
+           !snapshot.members.isEmpty {
+            members = snapshot.members
+            chores = snapshot.chores
+            activeMemberID = snapshot.members.contains(where: { $0.id == snapshot.activeMemberID })
+                ? snapshot.activeMemberID
+                : snapshot.members[0].id
+            return
+        }
+
         let mom = FamilyMember(name: "Mom", role: .parent)
         let aiden = FamilyMember(name: "Aiden", role: .child)
         let sibling = FamilyMember(name: "Sam", role: .child)
@@ -50,6 +69,7 @@ final class ChoreStore: ObservableObject {
                 points: 5
             )
         ]
+        save()
     }
 
     var activeMember: FamilyMember {
@@ -92,12 +112,22 @@ final class ChoreStore: ObservableObject {
 
     func complete(_ chore: Chore) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
-        chores[index].status = chores[index].requiresApproval ? .awaitingApproval : .completed
+
+        let completedCopy = chores[index]
+        if chores[index].requiresApproval {
+            chores[index].status = .awaitingApproval
+        } else {
+            chores[index].status = .completed
+            createNextOccurrenceIfNeeded(from: completedCopy)
+        }
     }
 
     func approve(_ chore: Chore) {
         guard let index = chores.firstIndex(where: { $0.id == chore.id }) else { return }
+
+        let completedCopy = chores[index]
         chores[index].status = .completed
+        createNextOccurrenceIfNeeded(from: completedCopy)
     }
 
     func reopen(_ chore: Chore) {
@@ -124,5 +154,59 @@ final class ChoreStore: ObservableObject {
             points: points
         )
         chores.insert(chore, at: 0)
+    }
+
+    func resetDemoData() {
+        UserDefaults.standard.removeObject(forKey: Self.storageKey)
+    }
+
+    private func save() {
+        let snapshot = Snapshot(
+            members: members,
+            chores: chores,
+            activeMemberID: activeMemberID
+        )
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        UserDefaults.standard.set(data, forKey: Self.storageKey)
+    }
+
+    private func createNextOccurrenceIfNeeded(from chore: Chore) {
+        guard chore.recurrence != .once else { return }
+
+        var next = chore
+        next = Chore(
+            title: chore.title,
+            detail: chore.detail,
+            kind: chore.kind,
+            recurrence: chore.recurrence,
+            dueDate: nextDueDate(after: chore.dueDate ?? .now, recurrence: chore.recurrence),
+            assignedTo: chore.kind == .assigned ? chore.assignedTo : nil,
+            claimedBy: nil,
+            status: .open,
+            requiresApproval: chore.requiresApproval,
+            points: chore.points
+        )
+        chores.insert(next, at: 0)
+    }
+
+    private func nextDueDate(after date: Date, recurrence: Recurrence) -> Date? {
+        let calendar = Calendar.current
+
+        switch recurrence {
+        case .once:
+            return nil
+        case .daily:
+            return calendar.date(byAdding: .day, value: 1, to: date)
+        case .weekly:
+            return calendar.date(byAdding: .day, value: 7, to: date)
+        case .monthly:
+            return calendar.date(byAdding: .month, value: 1, to: date)
+        case .weekdays:
+            var candidate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+            while calendar.isDateInWeekend(candidate) {
+                candidate = calendar.date(byAdding: .day, value: 1, to: candidate) ?? candidate
+            }
+            return candidate
+        }
     }
 }
