@@ -28,7 +28,7 @@ if (!process.env.BETTER_AUTH_SECRET) {
 }
 
 export const auth = betterAuth({
-  appName: "Chore Tracker",
+  appName: "New Life Media",
   database,
   baseURL: process.env.BETTER_AUTH_URL || "http://127.0.0.1:3000",
   basePath: "/api/auth",
@@ -74,12 +74,12 @@ export const auth = betterAuth({
         const { error } = await resend.emails.send({
           from,
           to: email,
-          subject: "Your Chore Tracker sign-in code",
+          subject: "Your New Life Media sign-in code",
           text: `Your verification code is ${otp}. It expires in 10 minutes.`,
           html: `
             <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:auto;padding:32px">
-              <div style="font-size:36px;margin-bottom:12px">🏠</div>
-              <h1 style="font-size:24px;margin:0 0 12px">Your sign-in code</h1>
+              <div style="font-size:36px;margin-bottom:12px">✦</div>
+              <h1 style="font-size:24px;margin:0 0 12px">Your New Life Media sign-in code</h1>
               <p style="color:#555">Enter this code in the app:</p>
               <div style="font-size:36px;font-weight:700;letter-spacing:8px;margin:28px 0">${otp}</div>
               <p style="color:#777;font-size:14px">This code expires in 10 minutes. If you didn't request it, you can ignore this email.</p>
