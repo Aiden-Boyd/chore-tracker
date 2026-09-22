@@ -10,8 +10,11 @@ final class ChoreStore: ObservableObject {
     private var undoSnapshot: [Chore]?
     private var undoToken: UUID?
     private var undoTask: Task<Void, Never>?
+    private var storageKey: String?
+    private var isActivatingAccount = false
 
-    private static let storageKey = "chore-tracker.snapshot.v3"
+    private static let legacyStorageKey = "chore-tracker.snapshot.v3"
+    private static let migrationOwnerKey = "chore-tracker.snapshot-migration-owner.v1"
 
     private struct Snapshot: Codable {
         var members: [FamilyMember]
@@ -20,65 +23,62 @@ final class ChoreStore: ObservableObject {
     }
 
     init() {
-        if let data = UserDefaults.standard.data(forKey: Self.storageKey),
-           let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
+        let placeholder = FamilyMember(name: "Household", role: .parent)
+        members = [placeholder]
+        chores = []
+        activeMemberID = placeholder.id
+    }
+
+    func activateAccount(email: String, name: String, role: MemberRole) {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedEmail.isEmpty else { return }
+
+        let encodedEmail = Data(normalizedEmail.utf8).base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
+        let nextStorageKey = "chore-tracker.snapshot.v4.\(encodedEmail)"
+        guard storageKey != nextStorageKey else { return }
+
+        isActivatingAccount = true
+        storageKey = nextStorageKey
+
+        let defaults = UserDefaults.standard
+        let accountData = defaults.data(forKey: nextStorageKey)
+        let migrationOwner = defaults.string(forKey: Self.migrationOwnerKey)
+        let legacyData = migrationOwner == nil ? defaults.data(forKey: Self.legacyStorageKey) : nil
+        let dataToLoad = accountData ?? legacyData
+
+        if let dataToLoad,
+           let snapshot = try? JSONDecoder().decode(Snapshot.self, from: dataToLoad),
            !snapshot.members.isEmpty {
             members = snapshot.members
             chores = snapshot.chores
             activeMemberID = snapshot.members.contains(where: { $0.id == snapshot.activeMemberID })
                 ? snapshot.activeMemberID
                 : snapshot.members[0].id
-            return
+
+            if accountData == nil, legacyData != nil {
+                defaults.set(normalizedEmail, forKey: Self.migrationOwnerKey)
+            }
+        } else {
+            let accountMember = FamilyMember(
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Me" : name,
+                role: role
+            )
+            members = [accountMember]
+            chores = []
+            activeMemberID = accountMember.id
         }
 
-        let mom = FamilyMember(name: "Mom", role: .parent)
-        let aiden = FamilyMember(name: "Aiden", role: .child)
-        let sibling = FamilyMember(name: "Sam", role: .child, isManagedProfile: true)
-
-        members = [mom, aiden, sibling]
-        activeMemberID = mom.id
-        chores = [
-            Chore(
-                emoji: "🍽️",
-                title: "Unload dishwasher",
-                detail: "Put everything away and clear the rack.",
-                kind: .assigned,
-                recurrence: .daily,
-                dueDate: Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: .now),
-                assignedTo: aiden.id,
-                requiresApproval: false,
-                rewardCents: 100
-            ),
-            Chore(
-                emoji: "🗑️",
-                title: "Take trash out",
-                detail: "Kitchen and upstairs trash.",
-                kind: .assigned,
-                recurrence: .weekly,
-                dueDate: Calendar.current.date(byAdding: .day, value: 1, to: .now),
-                assignedTo: sibling.id,
-                requiresApproval: true,
-                rewardCents: 200
-            ),
-            Chore(
-                emoji: "🧹",
-                title: "Vacuum living room",
-                detail: "Available to anyone.",
-                kind: .claimable,
-                recurrence: .weekly,
-                requiresApproval: true,
-                rewardCents: 300
-            ),
-            Chore(
-                emoji: "✨",
-                title: "Wipe kitchen counters",
-                kind: .claimable,
-                recurrence: .daily,
-                requiresApproval: false,
-                rewardCents: 100
-            )
-        ]
+        isActivatingAccount = false
         save()
+    }
+
+    func deleteCurrentAccountData() {
+        guard let storageKey else { return }
+        UserDefaults.standard.removeObject(forKey: storageKey)
+        self.storageKey = nil
     }
 
     var activeMember: FamilyMember {
@@ -406,9 +406,10 @@ final class ChoreStore: ObservableObject {
     }
 
     private func save() {
+        guard !isActivatingAccount, let storageKey else { return }
         let snapshot = Snapshot(members: members, chores: chores, activeMemberID: activeMemberID)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        UserDefaults.standard.set(data, forKey: Self.storageKey)
+        UserDefaults.standard.set(data, forKey: storageKey)
     }
 
     private func createNextOccurrenceIfNeeded(from chore: Chore) {

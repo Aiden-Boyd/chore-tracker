@@ -31,6 +31,15 @@ struct ChoreTrackerApp: App {
             .environmentObject(auth)
             .environmentObject(notifications)
             .environmentObject(network)
+            .task(id: auth.stage) {
+                guard auth.stage == .signedIn else { return }
+                store.activateAccount(
+                    email: auth.normalizedEmail,
+                    name: auth.name,
+                    role: auth.role
+                )
+                await auth.validateSession()
+            }
         }
     }
 }

@@ -118,7 +118,7 @@ struct EmailAddressView: View {
                 AuthHeader(
                     step: 1,
                     title: "Let’s get you signed in",
-                    subtitle: "Use one New Life Media account across your apps.",
+                    subtitle: "Use your email to securely access Chore Tracker.",
                     symbol: "person.crop.circle.badge.checkmark"
                 )
 
@@ -291,7 +291,7 @@ struct AccountProfileView: View {
                 AuthHeader(
                     step: 3,
                     title: "Finish your account",
-                    subtitle: "This name follows your New Life Media account across apps.",
+                    subtitle: "Choose the name your household will see.",
                     symbol: "person.fill.checkmark"
                 )
 
@@ -318,7 +318,7 @@ struct AccountProfileView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("For this prototype")
+                    Text("This device")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
 
@@ -327,7 +327,7 @@ struct AccountProfileView: View {
                         roleButton("Child", symbol: "figure.child", role: .child)
                     }
 
-                    Text("This will move into household setup later instead of being part of your global account.")
+                    Text("Parents can add managed child profiles and switch between family members on this device.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

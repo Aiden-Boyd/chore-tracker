@@ -23,8 +23,12 @@ const database = process.env.DATABASE_URL
 
 const resend = new Resend(resendKey);
 
+if (!process.env.BETTER_AUTH_SECRET) {
+  throw new Error("BETTER_AUTH_SECRET is required.");
+}
+
 export const auth = betterAuth({
-  appName: "New Life Media",
+  appName: "Chore Tracker",
   database,
   baseURL: process.env.BETTER_AUTH_URL || "http://127.0.0.1:3000",
   basePath: "/api/auth",
@@ -37,7 +41,20 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24
   },
+  user: {
+    deleteUser: {
+      enabled: true
+    }
+  },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 60
+  },
   advanced: {
+    ipAddress: {
+      ipAddressHeaders: ["cf-connecting-ip"]
+    },
     database: {
       joins: true
     }
@@ -57,7 +74,7 @@ export const auth = betterAuth({
         const { error } = await resend.emails.send({
           from,
           to: email,
-          subject: "Your New Life Media sign-in code",
+          subject: "Your Chore Tracker sign-in code",
           text: `Your verification code is ${otp}. It expires in 10 minutes.`,
           html: `
             <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:auto;padding:32px">

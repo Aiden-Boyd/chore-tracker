@@ -4,7 +4,6 @@ enum AuthConfiguration {
     #if DEBUG
     static let apiBaseURL = URL(string: "http://127.0.0.1:3000")!
     #else
-    // Change this to your production VPS API URL before App Store release.
     static let apiBaseURL = URL(string: "https://auth.newlifemedia.co")!
     #endif
 }
@@ -36,7 +35,7 @@ actor EmailAuthService {
         let otp: String
     }
 
-        private struct ErrorResponse: Decodable {
+    private struct ErrorResponse: Decodable {
         let message: String?
         let error: String?
     }
@@ -69,6 +68,39 @@ actor EmailAuthService {
         }
 
         return token
+    }
+
+    func hasValidSession(token: String) async throws -> Bool {
+        let url = AuthConfiguration.apiBaseURL.appending(path: "api/auth/get-session")
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AuthError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { return false }
+        return String(data: data, encoding: .utf8) != "null"
+    }
+
+    func signOut(token: String) async throws {
+        let url = AuthConfiguration.apiBaseURL.appending(path: "api/auth/sign-out")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data("{}".utf8)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func deleteAccount(token: String) async throws {
+        let url = AuthConfiguration.apiBaseURL.appending(path: "api/auth/delete-user")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data("{}".utf8)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
     }
 
     private func validate(response: URLResponse, data: Data) throws {

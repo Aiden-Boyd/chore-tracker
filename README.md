@@ -2,13 +2,16 @@
 
 A native SwiftUI family chores app focused on a simple household workflow.
 
-## Current prototype
+## Features
 
 ### Authentication
 - Email + 6-digit one-time code
 - Codes are delivered through Resend
 - Resend API key stays on the server, never in the iOS app
 - Verified sessions receive a signed auth token stored in the iOS Keychain
+- Restored sessions are checked with the server before use
+- Household data is isolated per signed-in account on the device
+- Account deletion is available in Profile
 - Backend lives in `backend/`
 
 ### Parent
@@ -23,6 +26,7 @@ A native SwiftUI family chores app focused on a simple household workflow.
 - Edit or delete active chores
 - Recurring schedules stay hidden until their next available date
 - Calendar-based family history
+- Weekly and monthly payment history for every child
 
 ### Child
 - See assigned chores
@@ -61,4 +65,8 @@ npm start
 
 The iOS Simulator uses `http://127.0.0.1:3000` in DEBUG builds.
 
-Before release, set the production API URL in `AuthConfiguration` inside `ChoreTracker/PhoneAuthService.swift` and serve the API over HTTPS.
+Release builds use `https://auth.newlifemedia.co` over HTTPS. See `docs/RELEASE_CHECKLIST.md` before submitting a build.
+
+## Product scope
+
+Chore Tracker 1.0 is an offline-first, single-device household manager. A parent can create managed child profiles and switch between family members on that device. Separate signed-in accounts have isolated local household data; cross-device household sharing is not included in 1.0.

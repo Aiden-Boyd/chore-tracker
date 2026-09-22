@@ -21,6 +21,7 @@ final class AuthStore: ObservableObject {
     private let emailKey = "chore-tracker.auth-email.v1"
     private let nameKey = "chore-tracker.auth-name.v1"
     private let roleKey = "chore-tracker.auth-role.v1"
+    private var hasValidatedRestoredSession = false
 
     init() {
         if UserDefaults.standard.bool(forKey: sessionKey),
@@ -122,7 +123,44 @@ final class AuthStore: ObservableObject {
         stage = .signedIn
     }
 
+    func validateSession() async {
+        guard !hasValidatedRestoredSession else { return }
+        hasValidatedRestoredSession = true
+        guard let token = KeychainStore.shared.read("better-auth-token") else {
+            clearLocalSession()
+            return
+        }
+
+        do {
+            let isValid = try await EmailAuthService.shared.hasValidSession(token: token)
+            if !isValid {
+                clearLocalSession()
+            }
+        } catch {
+            // Keep the local session while offline. Authenticated requests will still be
+            // rejected by the server if the token has expired or been revoked.
+        }
+    }
+
     func signOut() {
+        let token = KeychainStore.shared.read("better-auth-token")
+        clearLocalSession()
+
+        if let token {
+            Task { try? await EmailAuthService.shared.signOut(token: token) }
+        }
+    }
+
+    func deleteAccount() async throws {
+        guard let token = KeychainStore.shared.read("better-auth-token") else {
+            clearLocalSession()
+            return
+        }
+        try await EmailAuthService.shared.deleteAccount(token: token)
+        clearLocalSession()
+    }
+
+    private func clearLocalSession() {
         UserDefaults.standard.removeObject(forKey: sessionKey)
         UserDefaults.standard.removeObject(forKey: emailKey)
         UserDefaults.standard.removeObject(forKey: nameKey)

@@ -6,6 +6,14 @@ import { auth } from "./auth.js";
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // Better Auth must receive the raw request before express.json() consumes it.
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
@@ -20,5 +28,5 @@ app.get("/health", (_req, res) => {
 });
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`New Life Media auth API listening on :${port}`);
+  console.log(`Chore Tracker auth API listening on :${port}`);
 });

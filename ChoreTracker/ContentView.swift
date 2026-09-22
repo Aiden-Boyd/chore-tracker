@@ -98,6 +98,8 @@ struct ProfileView: View {
     @EnvironmentObject private var store: ChoreStore
     @EnvironmentObject private var auth: AuthStore
     @State private var showingAddChild = false
+    @State private var showingDeleteAccount = false
+    @State private var deleteError: String?
 
     var body: some View {
         List {
@@ -158,7 +160,7 @@ struct ProfileView: View {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Available offline")
-                        Text("Your current household data is stored on this device.")
+                        Text("Household data is stored on this device and isolated to this signed-in account.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -179,6 +181,16 @@ struct ProfileView: View {
 
                 Button("Sign Out", role: .destructive) {
                     auth.signOut()
+                }
+
+                Button("Delete Account", role: .destructive) {
+                    showingDeleteAccount = true
+                }
+
+                if let deleteError {
+                    Text(deleteError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -208,6 +220,25 @@ struct ProfileView: View {
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Delete your account?",
+            isPresented: $showingDeleteAccount,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                Task {
+                    do {
+                        try await auth.deleteAccount()
+                        store.deleteCurrentAccountData()
+                    } catch {
+                        deleteError = error.localizedDescription
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your sign-in account and removes this household’s local chores, rewards, and payment history from this device.")
         }
     }
 
@@ -296,7 +327,6 @@ struct ChildProfileView: View {
 
     @State private var showingRename = false
     @State private var showingRemoveConfirmation = false
-    @State private var showingConnectAccount = false
 
     private var member: FamilyMember? {
         store.members.first(where: { $0.id == memberID })
@@ -367,13 +397,6 @@ struct ChildProfileView: View {
                             Label("Rename", systemImage: "pencil")
                         }
 
-                        if member.isManagedProfile {
-                            Button {
-                                showingConnectAccount = true
-                            } label: {
-                                Label("Connect an account", systemImage: "person.crop.circle.badge.plus")
-                            }
-                        }
                     }
 
                     if member.isManagedProfile {
@@ -401,13 +424,6 @@ struct ChildProfileView: View {
                         RenameChildView(memberID: memberID, currentName: member.name)
                     }
                     .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
-                }
-                .sheet(isPresented: $showingConnectAccount) {
-                    NavigationStack {
-                        ConnectChildAccountView(memberID: memberID)
-                    }
-                    .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                 }
                 .confirmationDialog(
@@ -493,88 +509,6 @@ struct RenameChildView: View {
         dismiss()
     }
 }
-
-struct ConnectChildAccountView: View {
-    @EnvironmentObject private var store: ChoreStore
-    @Environment(\.dismiss) private var dismiss
-
-    let memberID: UUID
-
-    private var childName: String {
-        store.members.first(where: { $0.id == memberID })?.name ?? "This child"
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 54))
-                    .foregroundStyle(.indigo)
-                    .padding(.top, 8)
-
-                VStack(spacing: 8) {
-                    Text("Connect \(childName)’s account")
-                        .font(.title2.bold())
-                        .multilineTextAlignment(.center)
-
-                    Text("When they get a phone or other device, you’ll be able to connect a New Life Media account to this existing child profile instead of creating a new one.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    accountCarryoverRow("Existing chores", icon: "checklist")
-                    accountCarryoverRow("Completion history", icon: "calendar")
-                    accountCarryoverRow("Money and rewards", icon: "dollarsign.circle")
-                    accountCarryoverRow("Same household profile", icon: "house")
-                }
-                .padding(18)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 20))
-
-                VStack(spacing: 8) {
-                    Label("Shared account linking isn’t enabled yet", systemImage: "wrench.and.screwdriver")
-                        .font(.subheadline.weight(.semibold))
-
-                    Text("The profile is ready for it. Once the household endpoints are added to the shared auth service, this button will send an invite and link the resulting account to this same member ID.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                Button("Done") {
-                    dismiss()
-                }
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(.indigo, in: RoundedRectangle(cornerRadius: 16))
-                .buttonStyle(SoftPressStyle())
-            }
-            .padding(24)
-        }
-        .navigationTitle("Connect Account")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func accountCarryoverRow(_ title: String, icon: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(.indigo)
-                .frame(width: 24)
-
-            Text(title)
-                .font(.subheadline.weight(.medium))
-
-            Spacer()
-
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        }
-    }
-}
-
 
 struct MoneyLedgerView: View {
     @EnvironmentObject private var store: ChoreStore
@@ -1084,7 +1018,7 @@ struct NotificationSettingsView: View {
             }
 
             Section {
-                Text("Due and overdue reminders are scheduled locally on this device. Cross-device assignment and approval alerts will become push notifications once household sync is connected.")
+                Text("Due, overdue, and approval reminders are scheduled locally on this device.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
